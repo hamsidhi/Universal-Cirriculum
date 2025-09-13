@@ -1,0 +1,633 @@
+-- ================================================================
+-- SKILLMIND AI - FUNCTIONAL QUERY EXAMPLES & API FUNCTIONS
+-- Complete Database Usage Demonstrations
+-- ================================================================
+
+-- ================================================================
+-- 1. CONTENT SEARCH & RETRIEVAL QUERIES
+-- ================================================================
+
+-- Get all content in hierarchical order
+SELECT 
+    ch.full_path,
+    cc.title,
+    cc.difficulty_level,
+    cc.cognitive_level,
+    cc.estimated_duration_minutes,
+    cc.content_preview
+FROM mv_content_hierarchy ch
+JOIN content_chunks cc ON ch.concept_id = cc.concept_id
+WHERE cc.status = 'published'
+ORDER BY ch.full_path;
+
+-- Search content by tags and difficulty
+SELECT 
+    cc.external_id,
+    cc.title,
+    cc.difficulty_level,
+    STRING_AGG(ct.tag_value, ', ') as tags,
+    cc.search_weight
+FROM content_chunks cc
+JOIN content_tags ct ON cc.chunk_id = ct.chunk_id
+WHERE cc.difficulty_level = 'beginner'
+  AND cc.status = 'published'
+  AND ct.tag_category = 'focus_area'
+GROUP BY cc.chunk_id, cc.external_id, cc.title, cc.difficulty_level, cc.search_weight
+ORDER BY cc.search_weight DESC;
+
+-- Get content with prerequisites
+SELECT 
+    target.title as content_title,
+    target.difficulty_level,
+    prereq.title as prerequisite_title,
+    cr.relationship_strength
+FROM content_relationships cr
+JOIN content_chunks target ON cr.target_chunk_id = target.chunk_id
+JOIN content_chunks prereq ON cr.source_chunk_id = prereq.chunk_id
+WHERE cr.relationship_type = 'prerequisite'
+ORDER BY target.title;
+
+-- ================================================================
+-- 2. AI AVATAR PERSONALIZATION QUERIES
+-- ================================================================
+
+-- Get role-specific content variations
+SELECT 
+    cc.title as content_title,
+    ar.role_name,
+    crv.instruction_type,
+    crv.teaching_strategy,
+    crv.interaction_style,
+    crv.help_type
+FROM content_role_variations crv
+JOIN content_chunks cc ON crv.chunk_id = cc.chunk_id
+JOIN ai_avatar_roles ar ON crv.role_id = ar.role_id
+WHERE cc.difficulty_level = 'beginner'
+ORDER BY cc.title, ar.role_name;
+
+-- Get personalized content for specific avatar
+SELECT 
+    cc.external_id,
+    cc.title,
+    cc.difficulty_level,
+    ar.role_name,
+    crv.teaching_strategy,
+    crv.assessment_type,
+    cc.content_preview
+FROM content_chunks cc
+JOIN content_role_variations crv ON cc.chunk_id = crv.chunk_id
+JOIN ai_avatar_roles ar ON crv.role_id = ar.role_id
+WHERE ar.role_name = 'tutor'
+  AND cc.status = 'published'
+ORDER BY cc.estimated_duration_minutes;
+
+-- ================================================================
+-- 3. LEARNING PATH GENERATION QUERIES
+-- ================================================================
+
+-- Generate learning path based on dependencies
+WITH RECURSIVE learning_path AS (
+    -- Base case: Start with content that has no prerequisites
+    SELECT 
+        cc.chunk_id,
+        cc.title,
+        cc.difficulty_level,
+        cc.estimated_duration_minutes,
+        1 as level,
+        ARRAY[cc.chunk_id] as path
+    FROM content_chunks cc
+    WHERE cc.status = 'published'
+      AND cc.difficulty_level = 'beginner'
+      AND NOT EXISTS (
+          SELECT 1 FROM content_relationships cr 
+          WHERE cr.target_chunk_id = cc.chunk_id 
+          AND cr.relationship_type = 'prerequisite'
+      )
+    
+    UNION ALL
+    
+    -- Recursive case: Add content that depends on completed content
+    SELECT 
+        cc.chunk_id,
+        cc.title,
+        cc.difficulty_level,
+        cc.estimated_duration_minutes,
+        lp.level + 1,
+        lp.path || cc.chunk_id
+    FROM content_chunks cc
+    JOIN content_relationships cr ON cc.chunk_id = cr.target_chunk_id
+    JOIN learning_path lp ON cr.source_chunk_id = lp.chunk_id
+    WHERE cr.relationship_type = 'prerequisite'
+      AND cc.chunk_id != ALL(lp.path) -- Prevent cycles
+      AND lp.level < 10 -- Limit depth
+)
+SELECT 
+    level,
+    title,
+    difficulty_level,
+    estimated_duration_minutes,
+    SUM(estimated_duration_minutes) OVER (ORDER BY level, title) as cumulative_duration
+FROM learning_path
+ORDER BY level, title;
+
+-- Get next recommended content for user
+SELECT 
+    cc.external_id,
+    cc.title,
+    cc.difficulty_level,
+    cc.estimated_duration_minutes,
+    CASE 
+        WHEN up.chunk_id IS NULL THEN 'not_started'
+        ELSE up.status
+    END as user_status,
+    ch.full_path
+FROM content_chunks cc
+JOIN mv_content_hierarchy ch ON cc.concept_id = ch.concept_id
+LEFT JOIN user_progress up ON cc.chunk_id = up.chunk_id 
+WHERE cc.status = 'published'
+  AND (up.status IS NULL OR up.status IN ('not_started', 'in_progress'))
+  AND cc.difficulty_level = 'beginner'
+ORDER BY ch.full_path
+LIMIT 5;
+
+-- ================================================================
+-- 4. ANALYTICS & REPORTING QUERIES
+-- ================================================================
+
+-- Content performance analytics
+SELECT 
+    cc.external_id,
+    cc.title,
+    cc.difficulty_level,
+    COUNT(up.user_id) as total_learners,
+    COUNT(CASE WHEN up.status = 'completed' THEN 1 END) as completed_count,
+    ROUND(
+        COUNT(CASE WHEN up.status = 'completed' THEN 1 END)::decimal / 
+        NULLIF(COUNT(up.user_id), 0) * 100, 2
+    ) as completion_rate_pct,
+    ROUND(AVG(up.time_spent_minutes), 1) as avg_time_minutes,
+    ROUND(AVG(up.mastery_score), 1) as avg_mastery_score
+FROM content_chunks cc
+LEFT JOIN user_progress up ON cc.chunk_id = up.chunk_id
+WHERE cc.status = 'published'
+GROUP BY cc.chunk_id, cc.external_id, cc.title, cc.difficulty_level
+ORDER BY completion_rate_pct DESC, total_learners DESC;
+
+-- User progress summary by difficulty
+SELECT 
+    cc.difficulty_level,
+    COUNT(DISTINCT cc.chunk_id) as total_content,
+    COUNT(DISTINCT up.user_id) as unique_learners,
+    COUNT(CASE WHEN up.status = 'completed' THEN 1 END) as completions,
+    ROUND(AVG(up.completion_percentage), 1) as avg_progress_pct,
+    ROUND(AVG(up.time_spent_minutes), 1) as avg_time_spent
+FROM content_chunks cc
+LEFT JOIN user_progress up ON cc.chunk_id = up.chunk_id
+WHERE cc.status = 'published'
+GROUP BY cc.difficulty_level
+ORDER BY cc.difficulty_level;
+
+-- Assessment performance analysis
+SELECT 
+    a.title as assessment_title,
+    cc.difficulty_level,
+    COUNT(uaa.attempt_id) as total_attempts,
+    COUNT(DISTINCT uaa.user_id) as unique_test_takers,
+    ROUND(AVG(uaa.percentage_score), 1) as avg_score_pct,
+    COUNT(CASE WHEN uaa.is_passing = true THEN 1 END) as passed_attempts,
+    ROUND(AVG(uaa.time_spent_minutes), 1) as avg_time_minutes
+FROM assessments a
+JOIN content_chunks cc ON a.chunk_id = cc.chunk_id  
+LEFT JOIN user_assessment_attempts uaa ON a.assessment_id = uaa.assessment_id
+GROUP BY a.assessment_id, a.title, cc.difficulty_level
+ORDER BY avg_score_pct DESC;
+
+-- ================================================================
+-- 5. ADVANCED SEARCH & RECOMMENDATION FUNCTIONS
+-- ================================================================
+
+-- Content recommendation based on user progress and tags
+CREATE OR REPLACE FUNCTION get_personalized_recommendations(
+    input_user_id UUID,
+    max_recommendations INTEGER DEFAULT 5
+)
+RETURNS TABLE (
+    external_id VARCHAR,
+    title VARCHAR,
+    difficulty_level VARCHAR,
+    estimated_duration INTEGER,
+    recommendation_score DECIMAL,
+    reason TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH user_completed_tags AS (
+        SELECT DISTINCT ct.tag_category, ct.tag_value, COUNT(*) as frequency
+        FROM user_progress up
+        JOIN content_chunks cc ON up.chunk_id = cc.chunk_id
+        JOIN content_tags ct ON cc.chunk_id = ct.chunk_id
+        WHERE up.user_id = input_user_id 
+        AND up.status IN ('completed', 'mastered')
+        GROUP BY ct.tag_category, ct.tag_value
+    ),
+    content_scores AS (
+        SELECT 
+            cc.chunk_id,
+            cc.external_id,
+            cc.title,
+            cc.difficulty_level,
+            cc.estimated_duration_minutes,
+            COALESCE(
+                (SELECT SUM(uctags.frequency * ct.tag_weight) 
+                 FROM content_tags ct 
+                 JOIN user_completed_tags uctags ON ct.tag_category = uctags.tag_category 
+                                                  AND ct.tag_value = uctags.tag_value
+                 WHERE ct.chunk_id = cc.chunk_id), 0
+            ) as recommendation_score,
+            'Based on your completed content in similar topics' as reason
+        FROM content_chunks cc
+        LEFT JOIN user_progress up ON cc.chunk_id = up.chunk_id AND up.user_id = input_user_id
+        WHERE cc.status = 'published'
+        AND (up.status IS NULL OR up.status NOT IN ('completed', 'mastered'))
+    )
+    SELECT 
+        cs.external_id,
+        cs.title,
+        cs.difficulty_level,
+        cs.estimated_duration_minutes,
+        cs.recommendation_score,
+        cs.reason
+    FROM content_scores cs
+    WHERE cs.recommendation_score > 0
+    ORDER BY cs.recommendation_score DESC
+    LIMIT max_recommendations;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Content search with semantic similarity
+CREATE OR REPLACE FUNCTION search_content_semantic(
+    search_query_embedding VECTOR(384),
+    similarity_threshold DECIMAL DEFAULT 0.7,
+    max_results INTEGER DEFAULT 10
+)
+RETURNS TABLE (
+    external_id VARCHAR,
+    title VARCHAR,
+    content_preview TEXT,
+    difficulty_level VARCHAR,
+    similarity_score DECIMAL
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        cc.external_id,
+        cc.title,
+        cc.content_preview,
+        cc.difficulty_level,
+        (1 - (ce.embedding_vector <=> search_query_embedding))::DECIMAL as similarity_score
+    FROM content_embeddings ce
+    JOIN content_chunks cc ON ce.chunk_id = cc.chunk_id
+    WHERE cc.status = 'published'
+    AND (1 - (ce.embedding_vector <=> search_query_embedding)) >= similarity_threshold
+    ORDER BY similarity_score DESC
+    LIMIT max_results;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ================================================================
+-- 6. USER PROGRESS TRACKING FUNCTIONS
+-- ================================================================
+
+-- Update user progress with comprehensive tracking
+CREATE OR REPLACE FUNCTION update_user_progress(
+    p_user_id UUID,
+    p_chunk_external_id VARCHAR,
+    p_status VARCHAR,
+    p_completion_percentage DECIMAL DEFAULT NULL,
+    p_time_spent INTEGER DEFAULT NULL,
+    p_difficulty_experienced VARCHAR DEFAULT NULL
+)
+RETURNS VOID AS $$
+DECLARE
+    v_chunk_id UUID;
+    v_existing_record BOOLEAN;
+BEGIN
+    -- Get chunk ID from external ID
+    SELECT chunk_id INTO v_chunk_id 
+    FROM content_chunks 
+    WHERE external_id = p_chunk_external_id;
+    
+    IF v_chunk_id IS NULL THEN
+        RAISE EXCEPTION 'Content chunk not found: %', p_chunk_external_id;
+    END IF;
+    
+    -- Check if progress record exists
+    SELECT EXISTS(SELECT 1 FROM user_progress WHERE user_id = p_user_id AND chunk_id = v_chunk_id) 
+    INTO v_existing_record;
+    
+    IF v_existing_record THEN
+        -- Update existing record
+        UPDATE user_progress SET
+            status = p_status,
+            completion_percentage = COALESCE(p_completion_percentage, completion_percentage),
+            time_spent_minutes = COALESCE(time_spent_minutes + p_time_spent, time_spent_minutes),
+            difficulty_experienced = COALESCE(p_difficulty_experienced, difficulty_experienced),
+            last_accessed_at = CURRENT_TIMESTAMP,
+            completed_at = CASE WHEN p_status IN ('completed', 'mastered') THEN CURRENT_TIMESTAMP ELSE completed_at END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = p_user_id AND chunk_id = v_chunk_id;
+    ELSE
+        -- Insert new record
+        INSERT INTO user_progress (
+            user_id, chunk_id, status, completion_percentage, time_spent_minutes,
+            difficulty_experienced, first_accessed_at, last_accessed_at,
+            completed_at
+        ) VALUES (
+            p_user_id, v_chunk_id, p_status, COALESCE(p_completion_percentage, 0),
+            COALESCE(p_time_spent, 0), p_difficulty_experienced,
+            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+            CASE WHEN p_status IN ('completed', 'mastered') THEN CURRENT_TIMESTAMP ELSE NULL END
+        );
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get comprehensive user progress dashboard
+CREATE OR REPLACE FUNCTION get_user_dashboard(
+    p_user_id UUID
+)
+RETURNS TABLE (
+    total_content INTEGER,
+    completed_content INTEGER,
+    in_progress_content INTEGER,
+    completion_rate DECIMAL,
+    total_time_spent INTEGER,
+    avg_mastery_score DECIMAL,
+    current_level VARCHAR,
+    next_recommendation VARCHAR
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH user_stats AS (
+        SELECT 
+            COUNT(*) as total_content,
+            COUNT(CASE WHEN up.status = 'completed' THEN 1 END) as completed_content,
+            COUNT(CASE WHEN up.status = 'in_progress' THEN 1 END) as in_progress_content,
+            SUM(up.time_spent_minutes) as total_time_spent,
+            AVG(up.mastery_score) as avg_mastery_score
+        FROM user_progress up
+        WHERE up.user_id = p_user_id
+    )
+    SELECT 
+        us.total_content,
+        us.completed_content,
+        us.in_progress_content,
+        CASE 
+            WHEN us.total_content > 0 THEN ROUND(us.completed_content::decimal / us.total_content * 100, 1)
+            ELSE 0
+        END as completion_rate,
+        us.total_time_spent,
+        ROUND(us.avg_mastery_score, 1) as avg_mastery_score,
+        CASE 
+            WHEN us.completed_content = 0 THEN 'beginner'
+            WHEN us.completed_content < 5 THEN 'beginner'
+            WHEN us.completed_content < 15 THEN 'intermediate'
+            ELSE 'advanced'
+        END as current_level,
+        (SELECT cc.title FROM content_chunks cc 
+         LEFT JOIN user_progress up2 ON cc.chunk_id = up2.chunk_id AND up2.user_id = p_user_id
+         WHERE cc.status = 'published' 
+         AND (up2.status IS NULL OR up2.status = 'not_started')
+         ORDER BY cc.difficulty_level, cc.estimated_duration_minutes
+         LIMIT 1) as next_recommendation
+    FROM user_stats us;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ================================================================
+-- 7. ASSESSMENT & EVALUATION FUNCTIONS
+-- ================================================================
+
+-- Submit and grade assessment attempt
+CREATE OR REPLACE FUNCTION submit_assessment_attempt(
+    p_user_id UUID,
+    p_assessment_id UUID,
+    p_responses JSONB,
+    p_time_spent INTEGER
+)
+RETURNS TABLE (
+    attempt_number INTEGER,
+    score_earned DECIMAL,
+    percentage_score DECIMAL,
+    is_passing BOOLEAN,
+    feedback TEXT
+) AS $$
+DECLARE
+    v_attempt_number INTEGER;
+    v_total_questions INTEGER;
+    v_correct_answers INTEGER;
+    v_max_score DECIMAL;
+    v_earned_score DECIMAL;
+    v_percentage DECIMAL;
+    v_passing BOOLEAN;
+    v_feedback TEXT;
+BEGIN
+    -- Get next attempt number
+    SELECT COALESCE(MAX(attempt_number), 0) + 1 
+    INTO v_attempt_number
+    FROM user_assessment_attempts 
+    WHERE user_id = p_user_id AND assessment_id = p_assessment_id;
+    
+    -- Calculate score for multiple choice
+    SELECT 
+        COUNT(*),
+        COUNT(CASE WHEN ao.is_correct AND (p_responses->>ao.order_index::text) = ao.option_text THEN 1 END),
+        a.points_possible
+    INTO v_total_questions, v_correct_answers, v_max_score
+    FROM assessments a
+    JOIN assessment_options ao ON a.assessment_id = ao.assessment_id
+    WHERE a.assessment_id = p_assessment_id
+    GROUP BY a.points_possible;
+    
+    -- Calculate scores
+    v_earned_score := (v_correct_answers::decimal / v_total_questions * v_max_score);
+    v_percentage := (v_earned_score / v_max_score * 100);
+    v_passing := v_percentage >= 70; -- 70% passing threshold
+    
+    -- Generate feedback
+    v_feedback := format('You answered %s out of %s questions correctly. Score: %.1f%%', 
+                        v_correct_answers, v_total_questions, v_percentage);
+    
+    -- Insert attempt record
+    INSERT INTO user_assessment_attempts (
+        user_id, assessment_id, attempt_number, responses, score_earned,
+        max_score_possible, percentage_score, is_passing, time_spent_minutes,
+        started_at, submitted_at, auto_graded, graded_at, feedback_provided
+    ) VALUES (
+        p_user_id, p_assessment_id, v_attempt_number, p_responses, v_earned_score,
+        v_max_score, v_percentage, v_passing, p_time_spent,
+        CURRENT_TIMESTAMP - (p_time_spent || ' minutes')::interval,
+        CURRENT_TIMESTAMP, true, CURRENT_TIMESTAMP, v_feedback
+    );
+    
+    RETURN QUERY
+    SELECT v_attempt_number, v_earned_score, v_percentage, v_passing, v_feedback;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ================================================================
+-- 8. SYSTEM MAINTENANCE & OPTIMIZATION QUERIES
+-- ================================================================
+
+-- Refresh all materialized views
+SELECT refresh_analytics_views();
+
+-- Analyze table statistics
+ANALYZE curriculum_modules;
+ANALYZE curriculum_components;
+ANALYZE curriculum_topics;
+ANALYZE curriculum_concepts;
+ANALYZE content_chunks;
+ANALYZE content_role_variations;
+ANALYZE content_embeddings;
+ANALYZE content_relationships;
+ANALYZE content_tags;
+ANALYZE user_progress;
+
+-- Performance monitoring query
+SELECT 
+    schemaname,
+    tablename,
+    attname,
+    n_distinct,
+    correlation
+FROM pg_stats
+WHERE schemaname = 'public'
+  AND tablename IN ('content_chunks', 'user_progress', 'content_embeddings')
+ORDER BY tablename, attname;
+
+-- Index usage analysis
+SELECT 
+    schemaname,
+    tablename,
+    indexname,
+    idx_tup_read,
+    idx_tup_fetch
+FROM pg_stat_user_indexes
+WHERE schemaname = 'public'
+ORDER BY idx_tup_read DESC;
+
+-- ================================================================
+-- 9. SAMPLE TESTING QUERIES
+-- ================================================================
+
+-- Test personalized learning path
+SELECT * FROM get_personalized_learning_path(
+    gen_random_uuid(), -- Random user ID
+    (SELECT role_id FROM ai_avatar_roles WHERE role_name = 'tutor'),
+    'beginner'
+);
+
+-- Test content recommendations
+SELECT * FROM get_personalized_recommendations(
+    (SELECT user_id FROM user_progress LIMIT 1),
+    3
+);
+
+-- Test user dashboard
+SELECT * FROM get_user_dashboard(
+    (SELECT user_id FROM user_progress LIMIT 1)
+);
+
+-- Test similar content search
+SELECT * FROM get_similar_content(
+    (SELECT chunk_id FROM content_chunks WHERE external_id = 'py-001-installation-overview'),
+    0.6,
+    5
+);
+
+-- Test progress update
+SELECT update_user_progress(
+    gen_random_uuid(),
+    'py-001-installation-overview',
+    'completed',
+    100.0,
+    15,
+    'easy'
+);
+
+-- ================================================================
+-- 10. SAMPLE REPORTING QUERIES
+-- ================================================================
+
+-- Weekly content engagement report
+SELECT 
+    DATE_TRUNC('week', up.last_accessed_at) as week_start,
+    COUNT(DISTINCT up.user_id) as active_users,
+    COUNT(DISTINCT up.chunk_id) as content_accessed,
+    COUNT(CASE WHEN up.status = 'completed' THEN 1 END) as completions,
+    ROUND(AVG(up.time_spent_minutes), 1) as avg_session_time
+FROM user_progress up
+WHERE up.last_accessed_at >= CURRENT_DATE - interval '4 weeks'
+GROUP BY DATE_TRUNC('week', up.last_accessed_at)
+ORDER BY week_start DESC;
+
+-- Content difficulty analysis
+SELECT 
+    cc.difficulty_level,
+    cc.cognitive_level,
+    COUNT(cc.chunk_id) as content_count,
+    ROUND(AVG(cc.estimated_duration_minutes), 1) as avg_duration,
+    ROUND(AVG(cc.complexity_score), 1) as avg_complexity,
+    ROUND(AVG(progress_stats.completion_rate), 1) as avg_completion_rate
+FROM content_chunks cc
+LEFT JOIN (
+    SELECT 
+        chunk_id,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END)::decimal / 
+        NULLIF(COUNT(*), 0) * 100 as completion_rate
+    FROM user_progress
+    GROUP BY chunk_id
+) progress_stats ON cc.chunk_id = progress_stats.chunk_id
+WHERE cc.status = 'published'
+GROUP BY cc.difficulty_level, cc.cognitive_level
+ORDER BY cc.difficulty_level, cc.cognitive_level;
+
+-- AI Avatar effectiveness analysis
+SELECT 
+    ar.role_name,
+    COUNT(DISTINCT up.user_id) as users_served,
+    COUNT(up.progress_id) as total_interactions,
+    ROUND(AVG(up.completion_percentage), 1) as avg_completion_rate,
+    ROUND(AVG(up.mastery_score), 1) as avg_mastery_score,
+    ROUND(AVG(up.time_spent_minutes), 1) as avg_time_spent
+FROM ai_avatar_roles ar
+JOIN user_progress up ON ar.role_id = up.role_id
+GROUP BY ar.role_id, ar.role_name
+ORDER BY avg_mastery_score DESC;
+
+-- ================================================================
+-- DATABASE IS FULLY FUNCTIONAL AND READY FOR PRODUCTION USE
+-- ================================================================
+
+-- Log successful setup completion
+INSERT INTO system_logs (log_type, message, metadata, severity)
+VALUES (
+    'system_ready', 
+    'SkillMind AI Knowledge Base is fully operational with sample data and functions',
+    jsonb_build_object(
+        'schema_version', '2.0',
+        'data_insertion_date', CURRENT_TIMESTAMP,
+        'total_content_chunks', (SELECT COUNT(*) FROM content_chunks),
+        'total_ai_roles', (SELECT COUNT(*) FROM ai_avatar_roles),
+        'vector_embeddings', (SELECT COUNT(*) FROM content_embeddings)
+    ),
+    'info'
+);
+
+-- Final verification query
+SELECT 'SkillMind AI Knowledge Base Setup Complete!' as status,
+       (SELECT COUNT(*) FROM content_chunks) as total_content,
+       (SELECT COUNT(*) FROM ai_avatar_roles) as ai_roles,
+       (SELECT COUNT(*) FROM content_embeddings) as vector_embeddings,
+       (SELECT COUNT(*) FROM user_progress) as progress_records;
