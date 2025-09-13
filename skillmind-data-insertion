@@ -1,0 +1,808 @@
+-- ================================================================
+-- SKILLMIND AI - DATA POPULATION SCRIPT
+-- CSV Integration & Sample Data Insertion
+-- ================================================================
+
+-- ================================================================
+-- 1. INITIALIZE AI AVATAR ROLES (Based on CSV Role Data)
+-- ================================================================
+
+INSERT INTO ai_avatar_roles (role_name, role_description, interaction_style, assessment_types, content_focus, target_audience) VALUES
+
+('teacher', 'Direct instructional role providing comprehensive explanations and structured learning', 
+ '{
+    "approach": "structured", 
+    "tone": "authoritative", 
+    "feedback": "detailed",
+    "instruction_types": ["direct_instruction", "guided_discovery", "demonstration"],
+    "strategies": ["lecture", "visual_aid", "example", "explanation"]
+ }'::jsonb,
+ '["knowledge_check", "comprehensive_exam", "project_evaluation", "formative", "diagnostic"]'::jsonb,
+ '["concept_explanation", "tutorial", "assessment_question", "step_by_step_tutorial"]'::jsonb,
+ '["absolute_beginners", "structured_learners", "visual_learners"]'::jsonb),
+
+('tutor', 'Interactive support role for personalized guidance and adaptive assistance',
+ '{
+    "approach": "adaptive", 
+    "tone": "supportive", 
+    "feedback": "encouraging",
+    "instruction_types": ["supportive", "directive", "socratic"],
+    "strategies": ["explanation", "guidance", "hint", "example"]
+ }'::jsonb, 
+ '["practice_exercise", "hint_provision", "progress_check", "formative", "coding"]'::jsonb,
+ '["code_example", "practice_exercise", "troubleshooting_guide", "step_by_step_tutorial"]'::jsonb,
+ '["struggling_learners", "intermediate_professionals", "adaptive_learners"]'::jsonb),
+
+('examiner', 'Assessment and evaluation specialist focused on measuring competency',
+ '{
+    "approach": "evaluative", 
+    "tone": "objective", 
+    "feedback": "analytical",
+    "instruction_types": ["diagnostic", "formative"],
+    "strategies": ["example", "guidance", "explanation"]
+ }'::jsonb,
+ '["formal_assessment", "certification_exam", "skill_validation", "multiple_choice", "coding", "short_answer"]'::jsonb,
+ '["assessment_question", "coding_challenge", "project"]'::jsonb,
+ '["certification_seekers", "career_switchers", "competency_focused"]'::jsonb),
+
+('peer', 'Collaborative learning facilitator promoting social learning',
+ '{
+    "approach": "collaborative", 
+    "tone": "casual", 
+    "feedback": "peer_based",
+    "instruction_types": ["peer_review", "study_group"],
+    "strategies": ["peer_review", "pair_programming", "example"]
+ }'::jsonb,
+ '["peer_review", "group_discussion", "collaborative_project", "coding"]'::jsonb,
+ '["practice_exercise", "code_example", "troubleshooting_guide"]'::jsonb,
+ '["social_learners", "study_groups", "collaborative_workers"]'::jsonb),
+
+('mentor', 'Career guidance and industry insights provider',
+ '{
+    "approach": "advisory", 
+    "tone": "experienced", 
+    "feedback": "strategic",
+    "instruction_types": ["best_practices", "industry_insights"],
+    "strategies": ["best_practices", "industry_insights", "example"]
+ }'::jsonb,
+ '["career_guidance", "industry_project", "portfolio_review"]'::jsonb,
+ '["tutorial", "project", "industry_example", "troubleshooting_guide"]'::jsonb,
+ '["career_switchers", "corporate_learners", "professionals"]'::jsonb);
+
+-- ================================================================
+-- 2. INITIALIZE TAG VOCABULARIES
+-- ================================================================
+
+INSERT INTO tag_vocabularies (category, tag_value, display_name, description) VALUES
+
+-- Difficulty levels
+('difficulty', 'beginner', 'Beginner', 'Suitable for absolute beginners with no prior experience'),
+('difficulty', 'intermediate', 'Intermediate', 'Requires basic understanding of programming concepts'),
+('difficulty', 'advanced', 'Advanced', 'For experienced developers looking to deepen expertise'),
+
+-- Learning styles
+('learning_style', 'visual', 'Visual', 'Content with diagrams, images, and visual representations'),
+('learning_style', 'kinesthetic', 'Hands-on', 'Interactive exercises and practical activities'),
+('learning_style', 'auditory', 'Audio-focused', 'Content with explanations and verbal instructions'),
+('learning_style', 'reading_writing', 'Reading/Writing', 'Text-based learning with written exercises'),
+
+-- Cognitive levels (Bloom's Taxonomy)
+('cognitive_level', 'remember', 'Remember', 'Recall facts and basic concepts'),
+('cognitive_level', 'understand', 'Understand', 'Explain ideas and concepts'),
+('cognitive_level', 'apply', 'Apply', 'Use information in new situations'),
+('cognitive_level', 'analyze', 'Analyze', 'Draw connections among ideas'),
+('cognitive_level', 'evaluate', 'Evaluate', 'Justify decisions or courses of action'),
+('cognitive_level', 'create', 'Create', 'Produce new or original work'),
+
+-- Subject classifications
+('subject', 'python', 'Python Programming', 'Python language specific content'),
+('subject', 'programming', 'General Programming', 'Programming concepts applicable across languages'),
+('subject', 'computer_science', 'Computer Science', 'Fundamental computer science concepts'),
+
+-- Content focus areas
+('focus_area', 'setup', 'Environment Setup', 'Installation and configuration content'),
+('focus_area', 'syntax', 'Language Syntax', 'Programming language syntax and structure'),
+('focus_area', 'data_structures', 'Data Structures', 'Lists, dictionaries, sets, tuples'),
+('focus_area', 'control_flow', 'Control Flow', 'Conditionals, loops, and program flow'),
+('focus_area', 'functions', 'Functions', 'Function definition and usage'),
+('focus_area', 'oop', 'Object-Oriented Programming', 'Classes, objects, and OOP concepts'),
+('focus_area', 'file_handling', 'File Operations', 'Reading and writing files'),
+('focus_area', 'error_handling', 'Error Handling', 'Exceptions and debugging'),
+('focus_area', 'libraries', 'Libraries & Modules', 'External libraries and package management'),
+('focus_area', 'projects', 'Projects & Applications', 'Real-world applications and projects');
+
+-- ================================================================
+-- 3. INITIALIZE SKILL TAXONOMY
+-- ================================================================
+
+-- Root level skills
+INSERT INTO skill_taxonomy (skill_name, skill_code, skill_description, skill_level, skill_category, industry_relevance, job_roles) VALUES
+
+('Python Programming', 'PYTHON_PROG', 'Core Python programming language skills', 1, 'programming', 
+ '["software_development", "data_science", "automation", "web_development", "ai_ml"]'::jsonb,
+ '["software_engineer", "data_scientist", "automation_engineer", "backend_developer", "ml_engineer"]'::jsonb),
+
+('Programming Fundamentals', 'PROG_FUNDAMENTALS', 'Basic programming concepts applicable across languages', 1, 'fundamentals',
+ '["software_development", "technology", "education"]'::jsonb, 
+ '["software_engineer", "developer", "programmer", "analyst"]'::jsonb),
+
+('Data Structures & Algorithms', 'DATA_STRUCT_ALGO', 'Understanding and implementation of data structures and algorithms', 2, 'algorithms',
+ '["software_development", "competitive_programming", "system_design"]'::jsonb, 
+ '["software_engineer", "algorithm_engineer", "system_architect"]'::jsonb),
+
+('Web Development', 'WEB_DEV', 'Building web applications and services', 2, 'development',
+ '["web_development", "e_commerce", "saas", "startups"]'::jsonb,
+ '["full_stack_developer", "frontend_developer", "backend_developer"]'::jsonb),
+
+('Data Science & Analytics', 'DATA_SCIENCE', 'Data analysis, visualization, and machine learning', 2, 'data_science',
+ '["data_science", "analytics", "business_intelligence", "ai_ml"]'::jsonb,
+ '["data_scientist", "data_analyst", "ml_engineer", "business_analyst"]'::jsonb);
+
+-- ================================================================
+-- 4. CREATE CURRICULUM HIERARCHY FROM CSV DATA
+-- ================================================================
+
+-- Insert Modules
+INSERT INTO curriculum_modules (module_code, title, description, difficulty_level, estimated_duration_minutes, order_index) VALUES
+('MOD_01', 'Foundation & Setup', 'Python installation, environment setup, and basic concepts', 'beginner', 120, 1),
+('MOD_02', 'Core Language Fundamentals', 'Variables, data types, and basic operations', 'beginner', 180, 2),
+('MOD_04', 'Control Flow & Logic', 'Conditional statements and loop structures', 'intermediate', 200, 4),
+('MOD_08', 'Error Handling & Debugging', 'Exception handling and debugging techniques', 'intermediate', 150, 8);
+
+-- Insert Components
+INSERT INTO curriculum_components (module_id, component_code, title, description, order_index) VALUES
+((SELECT module_id FROM curriculum_modules WHERE module_code = 'MOD_01'), 
+ 'COMP_1.1', 'Python Installation & IDE Setup', 'Setting up Python development environment', 1),
+
+((SELECT module_id FROM curriculum_modules WHERE module_code = 'MOD_02'), 
+ 'COMP_2.1', 'Variable Declaration & Naming', 'Variable creation and naming conventions', 1),
+
+((SELECT module_id FROM curriculum_modules WHERE module_code = 'MOD_04'), 
+ 'COMP_4.2', 'Loop Structures (for, while)', 'Implementing loops for iteration', 2),
+
+((SELECT module_id FROM curriculum_modules WHERE module_code = 'MOD_08'), 
+ 'COMP_8.1', 'Exception Handling & Recovery', 'Error handling and debugging strategies', 1);
+
+-- Insert Topics
+INSERT INTO curriculum_topics (component_id, topic_code, title, description, order_index) VALUES
+((SELECT component_id FROM curriculum_components WHERE component_code = 'COMP_1.1'), 
+ 'Python Installation & IDE Setup', 'Python Installation & IDE Setup', 'Complete environment setup process', 1),
+
+((SELECT component_id FROM curriculum_components WHERE component_code = 'COMP_2.1'), 
+ 'Variable Declaration & Naming', 'Variable Declaration & Naming', 'Variable creation and PEP-8 conventions', 1),
+
+((SELECT component_id FROM curriculum_components WHERE component_code = 'COMP_4.2'), 
+ 'Loop Structures (for, while)', 'Loop Structures (for, while)', 'For and while loop implementation', 1),
+
+((SELECT component_id FROM curriculum_components WHERE component_code = 'COMP_8.1'), 
+ 'Exception Handling & Recovery', 'Exception Handling & Recovery', 'Error handling and debugging', 1);
+
+-- Insert Concepts (subtopics from CSV)
+INSERT INTO curriculum_concepts (topic_id, concept_code, title, description, content_type, order_index) VALUES
+((SELECT topic_id FROM curriculum_topics WHERE topic_code = 'Python Installation & IDE Setup'), 
+ 'Multi-Platform Python Installation', 'Multi-Platform Python Installation', 'Cross-platform Python installation guide', 'concept_explanation', 1),
+
+((SELECT topic_id FROM curriculum_topics WHERE topic_code = 'Python Installation & IDE Setup'), 
+ 'Windows Installation Process', 'Windows Installation Process', 'Detailed Windows installation steps', 'step_by_step_tutorial', 2),
+
+((SELECT topic_id FROM curriculum_topics WHERE topic_code = 'Variable Declaration & Naming'), 
+ 'Variable Assignment and PEP-8 Naming', 'Variable Assignment and PEP-8 Naming', 'Variable creation and naming standards', 'assessment_question', 1),
+
+((SELECT topic_id FROM curriculum_topics WHERE topic_code = 'Loop Structures (for, while)'), 
+ 'For Loop Fundamentals & While Loop Implementation', 'For Loop Fundamentals & While Loop Implementation', 'Loop structures and iteration', 'practice_exercise', 1),
+
+((SELECT topic_id FROM curriculum_topics WHERE topic_code = 'Exception Handling & Recovery'), 
+ 'Error Recognition & AI-Assisted Debugging', 'Error Recognition & AI-Assisted Debugging', 'Error identification and debugging techniques', 'troubleshooting_guide', 1);
+
+-- ================================================================
+-- 5. INSERT CSV CONTENT DATA
+-- ================================================================
+
+-- Insert content chunks with CSV data
+INSERT INTO content_chunks (
+    concept_id, external_id, title, description, content_markdown, content_plain_text, 
+    content_preview, word_count, token_count, learning_objectives, prerequisites, 
+    estimated_duration_minutes, difficulty_level, cognitive_level, complexity_score, 
+    search_weight, status, published_at
+) VALUES
+
+-- py-001-installation-overview
+((SELECT concept_id FROM curriculum_concepts WHERE concept_code = 'Multi-Platform Python Installation'),
+ 'py-001-installation-overview',
+ 'Python Installation Overview',
+ 'Introduction to Python installation process across different operating systems',
+ '# Python Installation Overview
+
+Python is a high-level, interpreted programming language that needs to be installed on your system before you can start programming. This guide covers the installation process across different operating systems.
+
+## Key Installation Considerations
+
+1. **Choose the Right Version**: Python 3.x is recommended for all new projects
+2. **Operating System Compatibility**: Available for Windows, macOS, and Linux
+3. **Installation Methods**: Official installer, package managers, or distribution-specific methods
+4. **PATH Configuration**: Ensuring Python is accessible from command line
+
+## Prerequisites
+- Basic computer literacy
+- Understanding of file systems and directory structures
+- Administrative access to install software
+
+## Next Steps
+After understanding the overview, proceed to platform-specific installation guides.',
+ 'Python is a high-level interpreted programming language that needs to be installed on your system before programming. Choose Python 3.x, consider OS compatibility, use appropriate installation methods, and configure PATH properly.',
+ 'Python is a high-level, interpreted programming language that needs to be installed...',
+ 287, 384,
+ '["Understand Python installation requirements", "Identify installation methods for different OS", "Recognize Python version considerations"]'::jsonb,
+ '["Basic computer literacy", "Understanding of file systems"]'::jsonb,
+ 5, 'beginner', 'understand', 2, 9, 'published', CURRENT_TIMESTAMP),
+
+-- py-002-windows-installation  
+((SELECT concept_id FROM curriculum_concepts WHERE concept_code = 'Windows Installation Process'),
+ 'py-002-windows-installation',
+ 'Python Installation on Windows - Step by Step',
+ 'Detailed guide for installing Python on Windows operating systems',
+ '# Python Installation on Windows - Step by Step
+
+Follow these detailed steps to install Python on your Windows computer.
+
+## Step 1: Download Python Installer
+
+1. Visit the official Python website: https://python.org
+2. Click on "Downloads" tab
+3. The website will automatically suggest the latest Python version for Windows
+4. Click "Download Python 3.x.x" (latest version)
+
+## Step 2: Run the Installer
+
+1. Locate the downloaded installer file (usually in Downloads folder)
+2. Right-click and select "Run as administrator"
+3. **IMPORTANT**: Check the box "Add Python to PATH" at the bottom
+4. Click "Install Now" for standard installation
+
+## Step 3: Verify Installation
+
+1. Open Command Prompt (press Win+R, type "cmd", press Enter)
+2. Type `python --version` and press Enter
+3. You should see the Python version number displayed
+
+## Step 4: Test Python
+
+1. In Command Prompt, type `python` and press Enter
+2. You should see the Python interactive interpreter (>>>)
+3. Type `print("Hello, World!")` and press Enter
+4. Type `exit()` to quit Python
+
+## Troubleshooting
+
+- If "python" command not found: Restart Command Prompt or add Python to PATH manually
+- If permission errors: Run installer as administrator
+- If installation fails: Disable antivirus temporarily during installation',
+ 'Follow detailed steps to install Python on Windows: Download installer from python.org, run as administrator, check Add Python to PATH, verify installation with python --version command, and test with Hello World program.',
+ 'Follow these detailed steps to install Python on your Windows computer...',
+ 445, 612,
+ '["Download Python installer for Windows", "Execute installation with correct options", "Verify successful installation", "Configure PATH environment variable"]'::jsonb,
+ '["py-001-installation-overview", "Windows operating system"]'::jsonb,
+ 10, 'beginner', 'apply', 3, 8, 'published', CURRENT_TIMESTAMP),
+
+-- py-004-assessment-variables
+((SELECT concept_id FROM curriculum_concepts WHERE concept_code = 'Variable Assignment and PEP-8 Naming'),
+ 'py-004-assessment-variables',
+ 'Variables and Data Types Assessment',
+ 'Formative assessment questions for variable declaration and basic data types',
+ '# Variables and Data Types Assessment
+
+Test your understanding of Python variable declaration and PEP-8 naming conventions.
+
+## Question 1: Variable Naming (Multiple Choice)
+Which of the following is the BEST variable name according to PEP-8 conventions?
+
+A) `myVariableName`
+B) `my_variable_name`  
+C) `MyVariableName`
+D) `myvariablename`
+
+**Correct Answer: B) `my_variable_name`**
+*Explanation: PEP-8 recommends snake_case for variable names*
+
+## Question 2: Variable Assignment
+What will be the output of the following code?
+```python
+x = 5
+y = "5" 
+print(type(x), type(y))
+```
+
+A) `<class \'int\'> <class \'int\'>`
+B) `<class \'str\'> <class \'str\'>`
+C) `<class \'int\'> <class \'str\'>`
+D) `Error`
+
+**Correct Answer: C) `<class \'int\'> <class \'str\'>`**
+
+## Question 3: Variable Scope
+Identify the scope issue in this code:
+```python
+def my_function():
+    local_var = 10
+    
+print(local_var)  # What happens here?
+```
+
+**Answer: NameError - local_var is not accessible outside the function scope**',
+ 'Assessment questions covering PEP-8 naming conventions and variable concepts including naming best practices, data types, and variable scope.',
+ 'Assessment questions covering PEP-8 naming conventions and variable concepts...',
+ 156, 245,
+ '["Apply PEP-8 naming conventions", "Create variables with appropriate data types", "Demonstrate understanding of variable scope"]'::jsonb,
+ '["py-003-first-program", "Basic Python syntax"]'::jsonb,
+ 15, 'beginner', 'evaluate', 4, 7, 'published', CURRENT_TIMESTAMP),
+
+-- py-005-practice-loops
+((SELECT concept_id FROM curriculum_concepts WHERE concept_code = 'For Loop Fundamentals & While Loop Implementation'),
+ 'py-005-practice-loops',
+ 'Loop Structures Practice Exercises',
+ 'Hands-on coding exercises for mastering for and while loops',
+ '# Loop Structures Practice Exercises
+
+Complete these exercises to strengthen your understanding of Python loops.
+
+## Exercise 1: Basic For Loop
+Write a program that prints numbers from 1 to 10 using a for loop.
+
+```python
+# Solution:
+for i in range(1, 11):
+    print(i)
+```
+
+## Exercise 2: While Loop with User Input
+Create a program that keeps asking the user for input until they type "quit":
+
+```python
+# Solution:
+user_input = ""
+while user_input.lower() != "quit":
+    user_input = input("Enter something (type \'quit\' to exit): ")
+    if user_input.lower() != "quit":
+        print(f"You entered: {user_input}")
+print("Goodbye!")
+```
+
+## Exercise 3: Nested Loops - Multiplication Table
+Create a multiplication table using nested loops:
+
+```python
+# Solution:
+for i in range(1, 6):
+    for j in range(1, 6):
+        result = i * j
+        print(f"{i} x {j} = {result:2d}", end="  ")
+    print()  # New line after each row
+```
+
+## Exercise 4: Loop with List
+Write a program that counts vowels in a given string:
+
+```python
+# Solution:
+text = "Hello World"
+vowels = "aeiouAEIOU"
+count = 0
+
+for char in text:
+    if char in vowels:
+        count += 1
+        
+print(f"Number of vowels: {count}")
+```
+
+## Challenge Exercise: Prime Numbers
+Find all prime numbers between 1 and 50:
+
+```python
+# Solution:
+for num in range(2, 51):
+    is_prime = True
+    for i in range(2, int(num ** 0.5) + 1):
+        if num % i == 0:
+            is_prime = False
+            break
+    if is_prime:
+        print(num, end=" ")
+```',
+ 'Hands-on coding exercises for mastering for and while loops including basic loops, user input validation, nested loops, and practical applications with lists and string processing.',
+ 'Complete these exercises to strengthen your understanding of Python loops...',
+ 789, 1024,
+ '["Implement for loops with range() function", "Create while loops with proper termination", "Apply loops to solve practical problems"]'::jsonb,
+ '["py-conditionals", "py-basic-syntax", "py-variables"]'::jsonb,
+ 25, 'intermediate', 'create', 6, 8, 'published', CURRENT_TIMESTAMP),
+
+-- py-006-debug-common-errors
+((SELECT concept_id FROM curriculum_concepts WHERE concept_code = 'Error Recognition & AI-Assisted Debugging'),
+ 'py-006-debug-common-errors',
+ 'Common Python Errors and Debugging Guide',
+ 'Comprehensive guide to identifying, understanding, and fixing common Python errors',
+ '# Common Python Errors and Debugging Guide
+
+This guide helps you identify, understand, and fix the most common Python errors encountered by beginners and intermediate programmers.
+
+## 1. SyntaxError
+**What it means**: Python can\'t parse your code due to incorrect syntax.
+
+**Common causes**:
+- Missing colons after if, for, while, def statements
+- Incorrect indentation
+- Unmatched parentheses, brackets, or quotes
+- Using assignment (=) instead of comparison (==)
+
+**Example**:
+```python
+# Wrong:
+if x > 5
+    print("Greater than 5")
+    
+# Correct:
+if x > 5:
+    print("Greater than 5")
+```
+
+## 2. IndentationError
+**What it means**: Inconsistent or incorrect indentation.
+
+**How to fix**:
+- Use 4 spaces for each indentation level
+- Don\'t mix tabs and spaces
+- Ensure consistent indentation within blocks
+
+## 3. NameError
+**What it means**: Using a variable that hasn\'t been defined.
+
+**Common causes**:
+- Typos in variable names
+- Using variables before declaring them
+- Variable scope issues
+
+**Example**:
+```python
+# Wrong:
+print(my_variable)  # NameError if not defined
+
+# Correct:
+my_variable = "Hello"
+print(my_variable)
+```
+
+## 4. TypeError
+**What it means**: Operation performed on inappropriate data type.
+
+**Common examples**:
+- Adding string and integer
+- Calling non-callable objects
+- Passing wrong number of arguments
+
+## 5. IndexError
+**What it means**: Trying to access list/string index that doesn\'t exist.
+
+**Prevention**:
+- Check list length before accessing
+- Use proper range in loops
+- Handle empty lists
+
+## Debugging Strategies
+
+1. **Read error messages carefully**
+2. **Use print() statements for debugging**
+3. **Check variable types with type()**
+4. **Use Python debugger (pdb)**
+5. **Break down complex expressions**
+
+## AI-Assisted Debugging Tips
+
+1. **Describe the error clearly to AI**
+2. **Provide code context**
+3. **Ask for explanation, not just fixes**
+4. **Learn from AI suggestions**',
+ 'Comprehensive guide covering common Python errors including SyntaxError, IndentationError, NameError, TypeError, and IndexError with examples, causes, fixes, and debugging strategies.',
+ 'This guide helps you identify, understand, and fix the most common Python errors...',
+ 1245, 1678,
+ '["Identify common Python error types", "Use debugging techniques effectively", "Implement error prevention strategies"]'::jsonb,
+ '["py-basic-syntax", "py-functions", "py-data-structures"]'::jsonb,
+ 20, 'intermediate', 'analyze', 7, 9, 'published', CURRENT_TIMESTAMP);
+
+-- ================================================================
+-- 6. INSERT AI AVATAR ROLE VARIATIONS (From CSV Data)
+-- ================================================================
+
+-- Get role IDs for reference
+WITH role_ids AS (
+    SELECT role_name, role_id FROM ai_avatar_roles
+),
+content_ids AS (
+    SELECT external_id, chunk_id FROM content_chunks WHERE external_id IS NOT NULL
+)
+
+INSERT INTO content_role_variations (
+    chunk_id, role_id, instruction_type, teaching_strategy, interaction_style, 
+    help_type, assessment_type, question_format, collaboration_type, guidance_type
+)
+SELECT 
+    c.chunk_id,
+    r.role_id,
+    CASE r.role_name
+        WHEN 'teacher' THEN 'direct_instruction'
+        WHEN 'tutor' THEN 'supportive' 
+        WHEN 'examiner' THEN 'diagnostic'
+        WHEN 'peer' THEN 'study_group'
+        WHEN 'mentor' THEN 'best_practices'
+    END,
+    CASE r.role_name
+        WHEN 'teacher' THEN 'lecture'
+        WHEN 'tutor' THEN 'explanation'
+        WHEN 'examiner' THEN 'example'
+        WHEN 'peer' THEN 'peer_review'
+        WHEN 'mentor' THEN 'best_practices'
+    END,
+    CASE r.role_name
+        WHEN 'teacher' THEN 'authoritative'
+        WHEN 'tutor' THEN 'supportive'
+        WHEN 'examiner' THEN 'objective'
+        WHEN 'peer' THEN 'collaborative'
+        WHEN 'mentor' THEN 'advisory'
+    END,
+    CASE r.role_name
+        WHEN 'teacher' THEN 'explanation'
+        WHEN 'tutor' THEN 'guidance'
+        WHEN 'examiner' THEN 'hint'
+        WHEN 'peer' THEN 'peer_review'
+        WHEN 'mentor' THEN 'industry_insights'
+    END,
+    CASE r.role_name
+        WHEN 'teacher' THEN 'formative'
+        WHEN 'tutor' THEN 'formative'
+        WHEN 'examiner' THEN 'multiple_choice'
+        WHEN 'peer' THEN 'coding'
+        WHEN 'mentor' THEN 'portfolio_review'
+    END,
+    CASE r.role_name
+        WHEN 'teacher' THEN 'comprehensive'
+        WHEN 'tutor' THEN 'guided'
+        WHEN 'examiner' THEN 'structured'
+        WHEN 'peer' THEN 'collaborative'
+        WHEN 'mentor' THEN 'practical'
+    END,
+    CASE r.role_name
+        WHEN 'peer' THEN 'study_group'
+        WHEN 'peer' THEN 'pair_programming'
+        ELSE 'individual'
+    END,
+    CASE r.role_name
+        WHEN 'mentor' THEN 'best_practices'
+        WHEN 'mentor' THEN 'industry_insights'
+        ELSE 'standard'
+    END
+FROM content_ids c
+CROSS JOIN role_ids r;
+
+-- ================================================================
+-- 7. INSERT CONTENT RELATIONSHIPS (From CSV Dependencies)
+-- ================================================================
+
+-- Insert prerequisite relationships
+INSERT INTO content_relationships (source_chunk_id, target_chunk_id, relationship_type, relationship_strength)
+SELECT 
+    prereq.chunk_id as source_chunk_id,
+    target.chunk_id as target_chunk_id,
+    'prerequisite',
+    'strong'
+FROM content_chunks prereq
+JOIN content_chunks target ON target.external_id = 'py-002-windows-installation'
+WHERE prereq.external_id = 'py-001-installation-overview';
+
+-- Insert leads_to relationships
+INSERT INTO content_relationships (source_chunk_id, target_chunk_id, relationship_type, relationship_strength)
+VALUES
+-- py-001 leads to py-002 and py-003 (simulated)
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-001-installation-overview'),
+ (SELECT chunk_id FROM content_chunks WHERE external_id = 'py-002-windows-installation'),
+ 'leads_to', 'strong');
+
+-- Insert related topic relationships
+INSERT INTO content_relationships (source_chunk_id, target_chunk_id, relationship_type, relationship_strength)
+SELECT 
+    c1.chunk_id as source_chunk_id,
+    c2.chunk_id as target_chunk_id,
+    'related',
+    'medium'
+FROM content_chunks c1, content_chunks c2
+WHERE c1.difficulty_level = c2.difficulty_level 
+AND c1.chunk_id != c2.chunk_id
+AND c1.external_id IN ('py-001-installation-overview', 'py-002-windows-installation', 'py-004-assessment-variables');
+
+-- ================================================================
+-- 8. INSERT CONTENT TAGS (Based on CSV Keywords and Tags)
+-- ================================================================
+
+-- Insert tags for py-001-installation-overview
+INSERT INTO content_tags (chunk_id, tag_category, tag_value, tag_weight) VALUES
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-001-installation-overview'), 'subject', 'python', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-001-installation-overview'), 'focus_area', 'setup', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-001-installation-overview'), 'difficulty', 'beginner', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-001-installation-overview'), 'learning_style', 'reading_writing', 0.8);
+
+-- Insert tags for py-002-windows-installation  
+INSERT INTO content_tags (chunk_id, tag_category, tag_value, tag_weight) VALUES
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-002-windows-installation'), 'subject', 'python', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-002-windows-installation'), 'focus_area', 'setup', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-002-windows-installation'), 'difficulty', 'beginner', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-002-windows-installation'), 'learning_style', 'visual', 0.9),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-002-windows-installation'), 'learning_style', 'kinesthetic', 0.7);
+
+-- Insert tags for assessment content
+INSERT INTO content_tags (chunk_id, tag_category, tag_value, tag_weight) VALUES
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-004-assessment-variables'), 'subject', 'python', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-004-assessment-variables'), 'focus_area', 'syntax', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-004-assessment-variables'), 'difficulty', 'beginner', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-004-assessment-variables'), 'cognitive_level', 'evaluate', 1.0);
+
+-- Insert tags for practice exercises
+INSERT INTO content_tags (chunk_id, tag_category, tag_value, tag_weight) VALUES
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-005-practice-loops'), 'subject', 'python', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-005-practice-loops'), 'focus_area', 'control_flow', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-005-practice-loops'), 'difficulty', 'intermediate', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-005-practice-loops'), 'learning_style', 'kinesthetic', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-005-practice-loops'), 'cognitive_level', 'create', 1.0);
+
+-- Insert tags for troubleshooting guide
+INSERT INTO content_tags (chunk_id, tag_category, tag_value, tag_weight) VALUES
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-006-debug-common-errors'), 'subject', 'python', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-006-debug-common-errors'), 'focus_area', 'error_handling', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-006-debug-common-errors'), 'difficulty', 'intermediate', 1.0),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-006-debug-common-errors'), 'learning_style', 'reading_writing', 0.8),
+((SELECT chunk_id FROM content_chunks WHERE external_id = 'py-006-debug-common-errors'), 'cognitive_level', 'analyze', 1.0);
+
+-- ================================================================
+-- 9. INSERT SAMPLE VECTOR EMBEDDINGS
+-- ================================================================
+
+-- Note: In production, these would be generated by actual embedding models
+-- For demo purposes, we'll insert random vectors with appropriate dimensions
+
+INSERT INTO content_embeddings (chunk_id, embedding_vector, embedding_model)
+SELECT 
+    chunk_id,
+    (SELECT ARRAY(SELECT random() FROM generate_series(1,384)))::vector(384),
+    'sentence-transformers/all-MiniLM-L6-v2'
+FROM content_chunks 
+WHERE external_id IS NOT NULL;
+
+-- ================================================================
+-- 10. INSERT SAMPLE ASSESSMENTS
+-- ================================================================
+
+-- Create assessment for variables content
+INSERT INTO assessments (chunk_id, assessment_type, title, question_text, difficulty_level, estimated_time_minutes, auto_gradable)
+SELECT 
+    chunk_id,
+    'multiple_choice',
+    'PEP-8 Naming Convention Quiz',
+    'Which of the following variable names follows PEP-8 conventions?\nA) myVariableName\nB) my_variable_name\nC) MyVariableName\nD) myvariablename',
+    'beginner',
+    5,
+    true
+FROM content_chunks WHERE external_id = 'py-004-assessment-variables';
+
+-- Insert assessment options
+WITH assessment_info AS (
+    SELECT a.assessment_id 
+    FROM assessments a
+    JOIN content_chunks c ON a.chunk_id = c.chunk_id
+    WHERE c.external_id = 'py-004-assessment-variables'
+)
+INSERT INTO assessment_options (assessment_id, option_text, is_correct, explanation, order_index)
+SELECT 
+    assessment_id,
+    'myVariableName',
+    false,
+    'This uses camelCase, which is not the PEP-8 standard for variables',
+    1
+FROM assessment_info
+UNION ALL
+SELECT 
+    assessment_id,
+    'my_variable_name',
+    true,
+    'Correct! PEP-8 recommends snake_case for variable names',
+    2
+FROM assessment_info
+UNION ALL
+SELECT 
+    assessment_id,
+    'MyVariableName', 
+    false,
+    'This uses PascalCase, which is reserved for class names in Python',
+    3
+FROM assessment_info
+UNION ALL
+SELECT 
+    assessment_id,
+    'myvariablename',
+    false,
+    'This lacks separators and is hard to read',
+    4
+FROM assessment_info;
+
+-- ================================================================
+-- 11. INSERT SAMPLE USER PROGRESS DATA
+-- ================================================================
+
+-- Create sample users (in production, these would come from your auth system)
+INSERT INTO user_progress (user_id, chunk_id, status, completion_percentage, time_spent_minutes, mastery_score, first_accessed_at, last_accessed_at)
+SELECT 
+    gen_random_uuid(),
+    chunk_id,
+    CASE 
+        WHEN random() < 0.3 THEN 'completed'
+        WHEN random() < 0.6 THEN 'in_progress'
+        ELSE 'not_started'
+    END,
+    CASE 
+        WHEN random() < 0.3 THEN 100.0
+        WHEN random() < 0.6 THEN (random() * 80 + 20)::decimal(5,2)
+        ELSE 0.0
+    END,
+    (random() * 30 + 5)::integer,
+    CASE 
+        WHEN random() < 0.3 THEN (random() * 20 + 80)::decimal(5,2)
+        ELSE NULL
+    END,
+    CURRENT_TIMESTAMP - (random() * interval '30 days'),
+    CURRENT_TIMESTAMP - (random() * interval '7 days')
+FROM content_chunks 
+WHERE external_id IS NOT NULL;
+
+-- ================================================================
+-- 12. REFRESH MATERIALIZED VIEWS
+-- ================================================================
+
+REFRESH MATERIALIZED VIEW mv_content_hierarchy;
+REFRESH MATERIALIZED VIEW mv_user_progress_summary;  
+REFRESH MATERIALIZED VIEW mv_content_analytics;
+
+-- ================================================================
+-- 13. CREATE SAMPLE QUERIES FOR TESTING
+-- ================================================================
+
+-- Log successful data insertion
+INSERT INTO system_logs (log_type, message, severity)
+VALUES ('data_initialization', 'CSV data and sample content successfully inserted into SkillMind AI Knowledge Base', 'info');
+
+-- ================================================================
+-- DATA INSERTION COMPLETE
+-- ================================================================
+
+-- Verify data insertion
+SELECT 
+    'Modules' as table_name, COUNT(*) as record_count FROM curriculum_modules
+UNION ALL
+SELECT 'Components', COUNT(*) FROM curriculum_components  
+UNION ALL
+SELECT 'Topics', COUNT(*) FROM curriculum_topics
+UNION ALL
+SELECT 'Concepts', COUNT(*) FROM curriculum_concepts
+UNION ALL
+SELECT 'Content Chunks', COUNT(*) FROM content_chunks
+UNION ALL
+SELECT 'AI Roles', COUNT(*) FROM ai_avatar_roles
+UNION ALL
+SELECT 'Role Variations', COUNT(*) FROM content_role_variations
+UNION ALL
+SELECT 'Embeddings', COUNT(*) FROM content_embeddings
+UNION ALL
+SELECT 'Relationships', COUNT(*) FROM content_relationships
+UNION ALL
+SELECT 'Tags', COUNT(*) FROM content_tags
+UNION ALL
+SELECT 'Assessments', COUNT(*) FROM assessments
+UNION ALL
+SELECT 'Progress Records', COUNT(*) FROM user_progress;
+
+COMMIT;
