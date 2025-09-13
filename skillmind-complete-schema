@@ -1,0 +1,761 @@
+-- ================================================================
+-- SKILLMIND AI - UNIVERSAL SYLLABUS KNOWLEDGE BASE
+-- Complete Functional PostgreSQL Implementation
+-- Version: 2.0 - Optimized for CSV Integration
+-- ================================================================
+
+-- ================================================================
+-- PREREQUISITES & EXTENSIONS
+-- ================================================================
+
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "vector"; -- for pgvector support
+
+-- Create database (run separately if needed)
+-- CREATE DATABASE skillmind_knowledge_base 
+--   WITH ENCODING 'UTF8' 
+--   LC_COLLATE = 'en_US.UTF-8' 
+--   LC_CTYPE = 'en_US.UTF-8'
+--   TEMPLATE template0;
+
+-- Set configuration
+SET timezone = 'UTC';
+SET client_encoding = 'UTF8';
+
+-- ================================================================
+-- 1. CURRICULUM HIERARCHY TABLES
+-- ================================================================
+
+-- Modules: Top-level curriculum organization
+CREATE TABLE curriculum_modules (
+    module_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    module_code VARCHAR(20) UNIQUE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    version VARCHAR(20) DEFAULT '1.0.0',
+    difficulty_level VARCHAR(20) CHECK (difficulty_level IN ('beginner', 'intermediate', 'advanced')),
+    estimated_duration_minutes INTEGER,
+    prerequisites JSONB DEFAULT '[]'::jsonb,
+    learning_objectives JSONB DEFAULT '[]'::jsonb,
+    order_index INTEGER NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    
+    CONSTRAINT modules_order_unique UNIQUE (order_index, is_active)
+);
+
+-- Components: Major topic groupings within modules
+CREATE TABLE curriculum_components (
+    component_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    module_id UUID NOT NULL REFERENCES curriculum_modules(module_id) ON DELETE CASCADE,
+    component_code VARCHAR(50) UNIQUE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    estimated_duration_minutes INTEGER,
+    order_index INTEGER NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT components_module_order_unique UNIQUE (module_id, order_index, is_active)
+);
+
+-- Topics: Specific learning areas within components
+CREATE TABLE curriculum_topics (
+    topic_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    component_id UUID NOT NULL REFERENCES curriculum_components(component_id) ON DELETE CASCADE,
+    topic_code VARCHAR(100) UNIQUE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    estimated_duration_minutes INTEGER,
+    order_index INTEGER NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT topics_component_order_unique UNIQUE (component_id, order_index, is_active)
+);
+
+-- Concepts: Atomic, reusable content pieces (subtopics)
+CREATE TABLE curriculum_concepts (
+    concept_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    topic_id UUID NOT NULL REFERENCES curriculum_topics(topic_id) ON DELETE CASCADE,
+    concept_code VARCHAR(150) UNIQUE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    content_type VARCHAR(30) NOT NULL CHECK (content_type IN (
+        'assessment_question', 'concept_explanation', 'code_example', 
+        'tutorial', 'practice_exercise', 'troubleshooting_guide',
+        'step_by_step_tutorial'
+    )),
+    estimated_duration_minutes INTEGER,
+    order_index INTEGER NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT concepts_topic_order_unique UNIQUE (topic_id, order_index, is_active)
+);
+
+-- ================================================================
+-- 2. CONTENT STORAGE & VERSIONING
+-- ================================================================
+
+-- Main content storage with comprehensive metadata
+CREATE TABLE content_chunks (
+    chunk_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    concept_id UUID NOT NULL REFERENCES curriculum_concepts(concept_id) ON DELETE CASCADE,
+    external_id VARCHAR(100) UNIQUE, -- For CSV ID mapping
+    version VARCHAR(20) DEFAULT '1.0.0',
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    content_markdown TEXT NOT NULL,
+    content_plain_text TEXT NOT NULL,
+    content_html TEXT,
+    content_preview TEXT,
+    word_count INTEGER,
+    token_count INTEGER,
+    language_code VARCHAR(5) DEFAULT 'en',
+    format VARCHAR(20) DEFAULT 'markdown',
+    
+    -- Educational metadata from CSV
+    learning_objectives JSONB DEFAULT '[]'::jsonb,
+    prerequisites JSONB DEFAULT '[]'::jsonb,
+    estimated_duration_minutes INTEGER,
+    
+    -- Content classification
+    difficulty_level VARCHAR(20) CHECK (difficulty_level IN ('beginner', 'intermediate', 'advanced')),
+    cognitive_level VARCHAR(20) CHECK (cognitive_level IN (
+        'remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'
+    )),
+    complexity_score INTEGER CHECK (complexity_score >= 1 AND complexity_score <= 10),
+    
+    -- Quality metrics
+    quality_score DECIMAL(3,2) CHECK (quality_score >= 0 AND quality_score <= 10),
+    accuracy_validated BOOLEAN DEFAULT FALSE,
+    accessibility_score DECIMAL(3,2) CHECK (accessibility_score >= 0 AND accessibility_score <= 10),
+    search_weight INTEGER DEFAULT 5 CHECK (search_weight >= 1 AND search_weight <= 10),
+    
+    -- Status and lifecycle
+    status VARCHAR(20) DEFAULT 'published' CHECK (status IN (
+        'draft', 'review', 'approved', 'published', 'archived'
+    )),
+    is_current_version BOOLEAN DEFAULT TRUE,
+    published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    archived_at TIMESTAMP,
+    
+    -- Audit fields
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    updated_by UUID,
+    
+    CONSTRAINT content_concept_version_unique UNIQUE (concept_id, version)
+);
+
+-- Code examples storage
+CREATE TABLE content_code_examples (
+    code_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    title VARCHAR(255),
+    code_content TEXT NOT NULL,
+    language VARCHAR(20) DEFAULT 'python',
+    is_executable BOOLEAN DEFAULT TRUE,
+    expected_output TEXT,
+    explanation TEXT,
+    order_index INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Media assets
+CREATE TABLE content_media_assets (
+    asset_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    asset_type VARCHAR(20) NOT NULL CHECK (asset_type IN (
+        'image', 'video', 'audio', 'interactive', 'diagram', 'animation'
+    )),
+    file_path VARCHAR(500),
+    file_url VARCHAR(500),
+    file_size_bytes BIGINT,
+    mime_type VARCHAR(100),
+    alt_text TEXT,
+    caption TEXT,
+    transcript TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    order_index INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ================================================================
+-- 3. AI AVATAR ROLES & PERSONALIZATION
+-- ================================================================
+
+-- AI Avatar role definitions
+CREATE TABLE ai_avatar_roles (
+    role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    role_name VARCHAR(50) UNIQUE NOT NULL,
+    role_description TEXT,
+    interaction_style JSONB DEFAULT '{}'::jsonb,
+    assessment_types JSONB DEFAULT '[]'::jsonb,
+    content_focus JSONB DEFAULT '[]'::jsonb,
+    target_audience JSONB DEFAULT '[]'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Role-specific content variations and teaching approaches
+CREATE TABLE content_role_variations (
+    variation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    role_id UUID NOT NULL REFERENCES ai_avatar_roles(role_id) ON DELETE CASCADE,
+    
+    -- Role-specific teaching approach (from CSV)
+    instruction_type VARCHAR(100),
+    teaching_strategy VARCHAR(100),
+    interaction_style VARCHAR(100),
+    help_type VARCHAR(100),
+    assessment_type VARCHAR(100),
+    question_format VARCHAR(100),
+    collaboration_type VARCHAR(100),
+    guidance_type VARCHAR(100),
+    
+    -- Adapted content
+    adapted_content_markdown TEXT,
+    adapted_content_plain_text TEXT,
+    interaction_cues JSONB DEFAULT '{}'::jsonb,
+    assessment_integration JSONB DEFAULT '{}'::jsonb,
+    personalization_hints JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT content_role_unique UNIQUE (chunk_id, role_id)
+);
+
+-- ================================================================
+-- 4. VECTOR EMBEDDINGS & SEMANTIC SEARCH
+-- ================================================================
+
+-- Vector embeddings for semantic search
+CREATE TABLE content_embeddings (
+    embedding_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    embedding_model VARCHAR(100) NOT NULL DEFAULT 'sentence-transformers/all-MiniLM-L6-v2',
+    embedding_vector VECTOR(384) NOT NULL,
+    embedding_type VARCHAR(50) DEFAULT 'content',
+    model_version VARCHAR(20) DEFAULT '1.0',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT embedding_chunk_model_unique UNIQUE (chunk_id, embedding_model, embedding_type)
+);
+
+-- Content relationships and dependencies
+CREATE TABLE content_relationships (
+    relationship_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    target_chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    relationship_type VARCHAR(50) NOT NULL CHECK (relationship_type IN (
+        'prerequisite', 'follow_up', 'related', 'similar', 'contradicts', 
+        'example_of', 'builds_upon', 'references', 'alternative_approach',
+        'depends_on', 'leads_to'
+    )),
+    similarity_score DECIMAL(5,4) CHECK (similarity_score >= 0 AND similarity_score <= 1),
+    relationship_strength VARCHAR(20) DEFAULT 'medium' CHECK (relationship_strength IN (
+        'weak', 'medium', 'strong'
+    )),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT unique_relationship UNIQUE (source_chunk_id, target_chunk_id, relationship_type)
+);
+
+-- ================================================================
+-- 5. TAXONOMY & TAGGING SYSTEM  
+-- ================================================================
+
+-- Hierarchical skill taxonomy
+CREATE TABLE skill_taxonomy (
+    skill_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    parent_skill_id UUID REFERENCES skill_taxonomy(skill_id) ON DELETE CASCADE,
+    skill_name VARCHAR(255) NOT NULL,
+    skill_code VARCHAR(50) UNIQUE NOT NULL,
+    skill_description TEXT,
+    skill_level INTEGER DEFAULT 1,
+    skill_category VARCHAR(50),
+    industry_relevance JSONB DEFAULT '[]'::jsonb,
+    job_roles JSONB DEFAULT '[]'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Multi-dimensional content tagging
+CREATE TABLE content_tags (
+    tag_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    tag_category VARCHAR(50) NOT NULL,
+    tag_value VARCHAR(255) NOT NULL,
+    tag_weight DECIMAL(3,2) DEFAULT 1.0,
+    tag_source VARCHAR(50) DEFAULT 'manual',
+    confidence_score DECIMAL(3,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT unique_content_tag UNIQUE (chunk_id, tag_category, tag_value)
+);
+
+-- Pre-defined tag vocabularies
+CREATE TABLE tag_vocabularies (
+    vocab_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category VARCHAR(50) NOT NULL,
+    tag_value VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255),
+    description TEXT,
+    parent_tag VARCHAR(255),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT unique_vocab_tag UNIQUE (category, tag_value)
+);
+
+-- ================================================================
+-- 6. ASSESSMENT SYSTEM
+-- ================================================================
+
+-- Assessment items
+CREATE TABLE assessments (
+    assessment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    assessment_type VARCHAR(30) NOT NULL CHECK (assessment_type IN (
+        'multiple_choice', 'coding_challenge', 'project', 'essay', 
+        'fill_blank', 'matching', 'drag_drop', 'peer_review',
+        'formative', 'diagnostic'
+    )),
+    title VARCHAR(255) NOT NULL,
+    question_text TEXT NOT NULL,
+    instructions TEXT,
+    difficulty_level VARCHAR(20) CHECK (difficulty_level IN ('beginner', 'intermediate', 'advanced')),
+    estimated_time_minutes INTEGER,
+    points_possible INTEGER DEFAULT 100,
+    auto_gradable BOOLEAN DEFAULT FALSE,
+    rubric JSONB DEFAULT '{}'::jsonb,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Assessment options
+CREATE TABLE assessment_options (
+    option_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assessment_id UUID NOT NULL REFERENCES assessments(assessment_id) ON DELETE CASCADE,
+    option_text TEXT NOT NULL,
+    is_correct BOOLEAN DEFAULT FALSE,
+    explanation TEXT,
+    order_index INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Coding test cases
+CREATE TABLE coding_test_cases (
+    test_case_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assessment_id UUID NOT NULL REFERENCES assessments(assessment_id) ON DELETE CASCADE,
+    input_data TEXT,
+    expected_output TEXT NOT NULL,
+    is_hidden BOOLEAN DEFAULT FALSE,
+    points_value INTEGER DEFAULT 10,
+    timeout_seconds INTEGER DEFAULT 30,
+    memory_limit_mb INTEGER DEFAULT 128,
+    order_index INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ================================================================
+-- 7. USER ANALYTICS & PROGRESS TRACKING
+-- ================================================================
+
+-- User progress tracking
+CREATE TABLE user_progress (
+    progress_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    role_id UUID REFERENCES ai_avatar_roles(role_id),
+    
+    status VARCHAR(20) DEFAULT 'not_started' CHECK (status IN (
+        'not_started', 'in_progress', 'completed', 'mastered', 'needs_review'
+    )),
+    completion_percentage DECIMAL(5,2) DEFAULT 0.0 CHECK (completion_percentage >= 0 AND completion_percentage <= 100),
+    time_spent_minutes INTEGER DEFAULT 0,
+    attempts_count INTEGER DEFAULT 0,
+    mastery_score DECIMAL(5,2),
+    
+    interaction_patterns JSONB DEFAULT '{}'::jsonb,
+    difficulty_experienced VARCHAR(20) CHECK (difficulty_experienced IN ('easy', 'moderate', 'hard', 'very_hard')),
+    help_requests_count INTEGER DEFAULT 0,
+    
+    first_accessed_at TIMESTAMP,
+    last_accessed_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT unique_user_chunk_progress UNIQUE (user_id, chunk_id)
+);
+
+-- User assessment attempts
+CREATE TABLE user_assessment_attempts (
+    attempt_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    assessment_id UUID NOT NULL REFERENCES assessments(assessment_id) ON DELETE CASCADE,
+    attempt_number INTEGER NOT NULL,
+    
+    responses JSONB NOT NULL DEFAULT '{}'::jsonb,
+    score_earned DECIMAL(5,2),
+    max_score_possible DECIMAL(5,2),
+    percentage_score DECIMAL(5,2),
+    is_passing BOOLEAN,
+    
+    time_spent_minutes INTEGER,
+    started_at TIMESTAMP NOT NULL,
+    submitted_at TIMESTAMP,
+    auto_graded BOOLEAN DEFAULT FALSE,
+    graded_at TIMESTAMP,
+    graded_by UUID,
+    
+    hints_used JSONB DEFAULT '{}'::jsonb,
+    ai_assistance_used BOOLEAN DEFAULT FALSE,
+    feedback_provided TEXT,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    CONSTRAINT unique_user_assessment_attempt UNIQUE (user_id, assessment_id, attempt_number)
+);
+
+-- Learning path adaptations
+CREATE TABLE learning_path_adaptations (
+    adaptation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    chunk_id UUID NOT NULL REFERENCES content_chunks(chunk_id) ON DELETE CASCADE,
+    
+    adaptation_type VARCHAR(50) NOT NULL CHECK (adaptation_type IN (
+        'prerequisite_added', 'difficulty_adjusted', 'content_skipped',
+        'additional_practice', 'alternative_explanation', 'peer_collaboration'
+    )),
+    adaptation_reason TEXT,
+    ai_confidence DECIMAL(3,2),
+    
+    effectiveness_score DECIMAL(3,2),
+    user_satisfaction INTEGER CHECK (user_satisfaction >= 1 AND user_satisfaction <= 5),
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    evaluated_at TIMESTAMP
+);
+
+-- ================================================================
+-- 8. PERFORMANCE INDEXES
+-- ================================================================
+
+-- Curriculum hierarchy indexes
+CREATE INDEX idx_modules_order ON curriculum_modules(order_index) WHERE is_active = true;
+CREATE INDEX idx_components_module_order ON curriculum_components(module_id, order_index) WHERE is_active = true;
+CREATE INDEX idx_topics_component_order ON curriculum_topics(component_id, order_index) WHERE is_active = true;
+CREATE INDEX idx_concepts_topic_order ON curriculum_concepts(topic_id, order_index) WHERE is_active = true;
+
+-- Content retrieval optimization
+CREATE INDEX idx_content_chunks_concept ON content_chunks(concept_id) WHERE status = 'published';
+CREATE INDEX idx_content_chunks_external_id ON content_chunks(external_id) WHERE external_id IS NOT NULL;
+CREATE INDEX idx_content_chunks_status_language ON content_chunks(status, language_code) WHERE is_current_version = true;
+CREATE INDEX idx_content_chunks_difficulty_cognitive ON content_chunks(difficulty_level, cognitive_level) WHERE status = 'published';
+
+-- Vector similarity search optimization
+CREATE INDEX idx_content_embeddings_vector ON content_embeddings 
+    USING hnsw (embedding_vector vector_cosine_ops) WITH (m = 16, ef_construction = 64);
+CREATE INDEX idx_content_embeddings_chunk ON content_embeddings(chunk_id, embedding_type);
+
+-- Role-based content optimization
+CREATE INDEX idx_role_variations_chunk_role ON content_role_variations(chunk_id, role_id);
+CREATE INDEX idx_avatar_roles_name ON ai_avatar_roles(role_name) WHERE is_active = true;
+
+-- Tagging and search optimization
+CREATE INDEX idx_content_tags_chunk_category ON content_tags(chunk_id, tag_category);
+CREATE INDEX idx_content_tags_category_value ON content_tags(tag_category, tag_value);
+CREATE INDEX idx_content_tags_weight ON content_tags(tag_weight) WHERE tag_weight > 0.5;
+
+-- User analytics indexes
+CREATE INDEX idx_user_progress_user_status ON user_progress(user_id, status);
+CREATE INDEX idx_user_progress_chunk ON user_progress(chunk_id);
+CREATE INDEX idx_user_progress_last_accessed ON user_progress(last_accessed_at) WHERE status IN ('in_progress', 'completed');
+
+-- Assessment performance indexes
+CREATE INDEX idx_assessments_chunk_type ON assessments(chunk_id, assessment_type) WHERE is_active = true;
+CREATE INDEX idx_user_attempts_user_assessment ON user_assessment_attempts(user_id, assessment_id, attempt_number);
+
+-- Relationship indexes
+CREATE INDEX idx_content_relationships_source ON content_relationships(source_chunk_id, relationship_type);
+CREATE INDEX idx_content_relationships_target ON content_relationships(target_chunk_id, relationship_type);
+
+-- ================================================================
+-- 9. MATERIALIZED VIEWS
+-- ================================================================
+
+-- Content hierarchy flattened view
+CREATE MATERIALIZED VIEW mv_content_hierarchy AS
+SELECT 
+    cc.concept_id,
+    cc.concept_code,
+    cc.title as concept_title,
+    cc.content_type,
+    ct.topic_id,
+    ct.topic_code,
+    ct.title as topic_title,
+    comp.component_id,
+    comp.component_code,
+    comp.title as component_title,
+    mod.module_id,
+    mod.module_code,
+    mod.title as module_title,
+    mod.difficulty_level as module_difficulty,
+    mod.module_code || '.' || comp.component_code || '.' || ct.topic_code || '.' || cc.concept_code as full_path,
+    cc.estimated_duration_minutes as concept_duration,
+    ct.estimated_duration_minutes as topic_duration,
+    comp.estimated_duration_minutes as component_duration,
+    mod.estimated_duration_minutes as module_duration
+FROM curriculum_concepts cc
+JOIN curriculum_topics ct ON cc.topic_id = ct.topic_id
+JOIN curriculum_components comp ON ct.component_id = comp.component_id  
+JOIN curriculum_modules mod ON comp.module_id = mod.module_id
+WHERE cc.is_active = true AND ct.is_active = true AND comp.is_active = true AND mod.is_active = true;
+
+-- User progress summary
+CREATE MATERIALIZED VIEW mv_user_progress_summary AS
+SELECT 
+    up.user_id,
+    COUNT(*) as total_chunks,
+    COUNT(CASE WHEN up.status = 'completed' THEN 1 END) as completed_chunks,
+    COUNT(CASE WHEN up.status = 'mastered' THEN 1 END) as mastered_chunks,
+    AVG(up.completion_percentage) as avg_completion_percentage,
+    AVG(up.mastery_score) as avg_mastery_score,
+    SUM(up.time_spent_minutes) as total_time_spent_minutes,
+    MAX(up.last_accessed_at) as last_activity_at
+FROM user_progress up
+GROUP BY up.user_id;
+
+-- Content analytics
+CREATE MATERIALIZED VIEW mv_content_analytics AS
+SELECT 
+    cc.chunk_id,
+    ch.concept_id,
+    ch.full_path,
+    COUNT(DISTINCT up.user_id) as unique_learners,
+    AVG(up.completion_percentage) as avg_completion_rate,
+    AVG(up.mastery_score) as avg_mastery_score,
+    AVG(up.time_spent_minutes) as avg_time_spent,
+    AVG(cc.quality_score) as content_quality_score,
+    COUNT(DISTINCT cr.relationship_id) as relationship_count
+FROM content_chunks cc
+JOIN mv_content_hierarchy ch ON cc.concept_id = ch.concept_id
+LEFT JOIN user_progress up ON cc.chunk_id = up.chunk_id
+LEFT JOIN content_relationships cr ON cc.chunk_id = cr.source_chunk_id OR cc.chunk_id = cr.target_chunk_id
+WHERE cc.status = 'published'
+GROUP BY cc.chunk_id, ch.concept_id, ch.full_path;
+
+-- Create indexes on materialized views
+CREATE INDEX idx_mv_content_hierarchy_full_path ON mv_content_hierarchy(full_path);
+CREATE INDEX idx_mv_user_progress_summary_user ON mv_user_progress_summary(user_id);
+CREATE INDEX idx_mv_content_analytics_chunk ON mv_content_analytics(chunk_id);
+
+-- ================================================================
+-- 10. BUSINESS LOGIC FUNCTIONS
+-- ================================================================
+
+-- Function to get similar content using vector similarity
+CREATE OR REPLACE FUNCTION get_similar_content(
+    input_chunk_id UUID,
+    similarity_threshold DECIMAL DEFAULT 0.7,
+    limit_count INTEGER DEFAULT 10
+)
+RETURNS TABLE (
+    chunk_id UUID,
+    title VARCHAR,
+    similarity_score DECIMAL,
+    content_type VARCHAR,
+    full_path VARCHAR
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        cc.chunk_id,
+        cc.title,
+        (1 - (ce1.embedding_vector <=> ce2.embedding_vector))::DECIMAL as similarity_score,
+        cconcept.content_type,
+        ch.full_path
+    FROM content_embeddings ce1
+    JOIN content_embeddings ce2 ON ce1.embedding_model = ce2.embedding_model
+    JOIN content_chunks cc ON ce2.chunk_id = cc.chunk_id
+    JOIN curriculum_concepts cconcept ON cc.concept_id = cconcept.concept_id
+    JOIN mv_content_hierarchy ch ON cconcept.concept_id = ch.concept_id
+    WHERE ce1.chunk_id = input_chunk_id
+      AND ce2.chunk_id != input_chunk_id
+      AND cc.status = 'published'
+      AND (1 - (ce1.embedding_vector <=> ce2.embedding_vector)) >= similarity_threshold
+    ORDER BY similarity_score DESC
+    LIMIT limit_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to get personalized learning path
+CREATE OR REPLACE FUNCTION get_personalized_learning_path(
+    input_user_id UUID,
+    preferred_role_id UUID DEFAULT NULL,
+    target_difficulty VARCHAR DEFAULT 'beginner'
+)
+RETURNS TABLE (
+    chunk_id UUID,
+    title VARCHAR,
+    full_path VARCHAR,
+    difficulty_level VARCHAR,
+    estimated_duration INTEGER,
+    has_prerequisites_met BOOLEAN
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH user_completed AS (
+        SELECT DISTINCT cc.concept_id
+        FROM user_progress up
+        JOIN content_chunks cc ON up.chunk_id = cc.chunk_id
+        WHERE up.user_id = input_user_id 
+        AND up.status IN ('completed', 'mastered')
+    )
+    SELECT 
+        cc.chunk_id,
+        cc.title,
+        ch.full_path,
+        cc.difficulty_level,
+        cc.estimated_duration_minutes,
+        NOT EXISTS (
+            SELECT 1 FROM content_relationships cr
+            JOIN content_chunks prereq ON cr.source_chunk_id = prereq.chunk_id
+            WHERE cr.target_chunk_id = cc.chunk_id 
+            AND cr.relationship_type = 'prerequisite'
+            AND prereq.concept_id NOT IN (SELECT concept_id FROM user_completed)
+        ) as has_prerequisites_met
+    FROM content_chunks cc
+    JOIN mv_content_hierarchy ch ON cc.concept_id = ch.concept_id
+    LEFT JOIN user_progress up ON cc.chunk_id = up.chunk_id AND up.user_id = input_user_id
+    WHERE cc.status = 'published'
+      AND cc.difficulty_level = target_difficulty
+      AND (up.status IS NULL OR up.status NOT IN ('completed', 'mastered'))
+    ORDER BY ch.full_path, cc.estimated_duration_minutes
+    LIMIT 20;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to refresh materialized views
+CREATE OR REPLACE FUNCTION refresh_analytics_views()
+RETURNS VOID AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW mv_content_hierarchy;
+    REFRESH MATERIALIZED VIEW mv_user_progress_summary;
+    REFRESH MATERIALIZED VIEW mv_content_analytics;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ================================================================
+-- 11. DATA VALIDATION CONSTRAINTS  
+-- ================================================================
+
+-- Content quality constraints
+ALTER TABLE content_chunks ADD CONSTRAINT check_word_count
+    CHECK (word_count >= 10 AND word_count <= 5000);
+    
+ALTER TABLE content_chunks ADD CONSTRAINT check_token_count
+    CHECK (token_count >= 5 AND token_count <= 8000);
+
+-- Assessment constraints
+ALTER TABLE user_assessment_attempts ADD CONSTRAINT check_percentage_score
+    CHECK (percentage_score >= 0 AND percentage_score <= 100);
+    
+ALTER TABLE user_progress ADD CONSTRAINT check_mastery_score  
+    CHECK (mastery_score IS NULL OR (mastery_score >= 0 AND mastery_score <= 100));
+
+-- Hierarchy order constraints
+ALTER TABLE curriculum_components ADD CONSTRAINT check_component_order 
+    CHECK (order_index > 0 AND order_index <= 100);
+    
+ALTER TABLE curriculum_topics ADD CONSTRAINT check_topic_order
+    CHECK (order_index > 0 AND order_index <= 100);
+    
+ALTER TABLE curriculum_concepts ADD CONSTRAINT check_concept_order  
+    CHECK (order_index > 0 AND order_index <= 1000);
+
+-- ================================================================
+-- 12. SECURITY & ACCESS CONTROL
+-- ================================================================
+
+-- Row Level Security
+ALTER TABLE user_progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_assessment_attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE learning_path_adaptations ENABLE ROW LEVEL SECURITY;
+
+-- Create roles
+CREATE ROLE skillmind_admin;
+CREATE ROLE skillmind_instructor;
+CREATE ROLE skillmind_student;
+CREATE ROLE skillmind_readonly;
+
+-- Grant permissions
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO skillmind_admin;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO skillmind_admin;
+GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO skillmind_admin;
+
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO skillmind_instructor;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO skillmind_instructor;
+
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO skillmind_student;
+GRANT INSERT, UPDATE ON user_progress, user_assessment_attempts, learning_path_adaptations TO skillmind_student;
+
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO skillmind_readonly;
+
+-- ================================================================
+-- 13. SYSTEM LOGGING & MONITORING
+-- ================================================================
+
+-- System logs table
+CREATE TABLE system_logs (
+    log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    log_type VARCHAR(50) NOT NULL,
+    message TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    severity VARCHAR(20) DEFAULT 'info' CHECK (severity IN ('debug', 'info', 'warning', 'error', 'critical')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Performance monitoring trigger function
+CREATE OR REPLACE FUNCTION log_content_access()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO system_logs (log_type, message, metadata, severity)
+    VALUES (
+        'content_access',
+        'Content chunk accessed',
+        jsonb_build_object(
+            'chunk_id', NEW.chunk_id,
+            'user_id', NEW.user_id,
+            'timestamp', NEW.created_at
+        ),
+        'info'
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for content access logging
+CREATE TRIGGER trigger_log_content_access
+    AFTER INSERT ON user_progress
+    FOR EACH ROW
+    EXECUTE FUNCTION log_content_access();
+
+-- ================================================================
+-- SCHEMA READY FOR CSV DATA INSERTION
+-- ================================================================
