@@ -1,0 +1,655 @@
+
+CREATE TABLE IF NOT EXISTS ugc_curricula (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    description TEXT,
+    version TEXT NOT NULL DEFAULT '1.0',
+    language TEXT NOT NULL DEFAULT 'english',
+    difficulty_level TEXT CHECK (difficulty_level IN ('beginner', 'intermediate', 'advanced')),
+    estimated_total_hours INTEGER,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- Courses (Within curricula - e.g., "Python Basics", "Advanced Python")
+CREATE TABLE IF NOT EXISTS ugc_courses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    curriculum_id UUID NOT NULL REFERENCES ugc_curricula(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    sequence_order INTEGER NOT NULL,
+    estimated_hours INTEGER,
+    prerequisites JSONB DEFAULT '[]'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'::jsonb,
+    UNIQUE(curriculum_id, sequence_order)
+);
+
+-- Modules (Within courses - e.g., "1. Foundation & Environment Setup")
+CREATE TABLE IF NOT EXISTS ugc_curriculum_modules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id UUID NOT NULL REFERENCES ugc_courses(id) ON DELETE CASCADE,
+    module_number INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    sequence_order INTEGER NOT NULL,
+    estimated_hours INTEGER,
+    learning_objectives JSONB DEFAULT '[]'::jsonb,
+    prerequisites JSONB DEFAULT '[]'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'::jsonb,
+    UNIQUE(course_id, sequence_order),
+    UNIQUE(course_id, module_number)
+);
+
+-- Components (Within modules - e.g., "1.1 Python Installation & IDE Setup")
+CREATE TABLE IF NOT EXISTS ugc_curriculum_components (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    module_id UUID NOT NULL REFERENCES ugc_curriculum_modules(id) ON DELETE CASCADE,
+    component_code TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    sequence_order INTEGER NOT NULL,
+    estimated_minutes INTEGER,
+    learning_objectives JSONB DEFAULT '[]'::jsonb,
+    key_skills JSONB DEFAULT '[]'::jsonb,
+    adaptive_features TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'::jsonb,
+    UNIQUE(module_id, sequence_order),
+    UNIQUE(module_id, component_code)
+);
+
+-- Topics (Within components - more granular breakdown)
+CREATE TABLE IF NOT EXISTS ugc_topics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    component_id UUID NOT NULL REFERENCES ugc_curriculum_components(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    sequence_order INTEGER NOT NULL,
+    estimated_minutes INTEGER,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(component_id, sequence_order)
+);
+
+-- ===============================================
+-- CONTENT MANAGEMENT TABLES
+-- ===============================================
+
+-- Content Items (Individual pieces of educational content)
+CREATE TABLE IF NOT EXISTS ugc_content_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    external_id TEXT UNIQUE,
+    topic_id UUID REFERENCES ugc_topics(id) ON DELETE CASCADE,
+    component_id UUID REFERENCES ugc_curriculum_components(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    content_type TEXT NOT NULL CHECK (content_type IN (
+        'concept_explanation', 'step_by_step_tutorial', 'assessment_question', 
+        'practice_exercise', 'troubleshooting_guide', 'video', 'interactive'
+    )),
+    format TEXT NOT NULL CHECK (format IN ('markdown', 'html', 'json', 'video', 'audio', 'interactive')),
+    language TEXT NOT NULL DEFAULT 'english',
+    version INTEGER NOT NULL DEFAULT 1,
+    
+    -- Content Storage
+    content_text TEXT,
+    content_data JSONB,
+    media_urls JSONB DEFAULT '[]'::jsonb,
+    
+    -- Educational Metadata
+    cognitive_level TEXT CHECK (cognitive_level IN ('remember', 'understand', 'apply', 'analyze', 'evaluate', 'create')),
+    difficulty_level TEXT CHECK (difficulty_level IN ('beginner', 'intermediate', 'advanced')),
+    complexity_score INTEGER CHECK (complexity_score BETWEEN 1 AND 10),
+    estimated_duration INTEGER,
+    prerequisites JSONB DEFAULT '[]'::jsonb,
+    
+    -- Teaching Roles Configuration
+    teacher_instruction_type TEXT,
+    teacher_strategy TEXT,
+    tutor_interaction TEXT,
+    tutor_help_type TEXT,
+    examiner_assessment_type TEXT,
+    examiner_question_format TEXT,
+    peer_collaboration TEXT,
+    mentor_guidance TEXT,
+    
+    -- Relationships
+    depends_on JSONB DEFAULT '[]'::jsonb,
+    leads_to JSONB DEFAULT '[]'::jsonb,
+    related_topics JSONB DEFAULT '[]'::jsonb,
+    
+    -- Search and Discovery
+    keywords JSONB DEFAULT '[]'::jsonb,
+    search_weight INTEGER DEFAULT 1,
+    content_preview TEXT,
+    word_count INTEGER,
+    token_count INTEGER,
+    
+    -- External Embeddings Integration
+    embedding_source TEXT,
+    external_vector_id TEXT,
+    embedding_model TEXT,
+    embedding_meta JSONB DEFAULT '{}'::jsonb,
+    
+    -- Status and Versioning
+    is_active BOOLEAN DEFAULT TRUE,
+    is_published BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Constraints
+    CHECK ((topic_id IS NOT NULL) OR (component_id IS NOT NULL))
+);
+
+-- Content Versions (Track content changes)
+CREATE TABLE IF NOT EXISTS ugc_content_versions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    content_item_id UUID NOT NULL REFERENCES ugc_content_items(id) ON DELETE CASCADE,
+    version_number INTEGER NOT NULL,
+    title TEXT,
+    content_text TEXT,
+    content_data JSONB,
+    change_description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(content_item_id, version_number)
+);
+
+-- ===============================================
+-- PERSONA AND ADAPTIVE LEARNING TABLES  
+-- ===============================================
+
+-- User Personas (The 6 learner archetypes)
+CREATE TABLE IF NOT EXISTS ugc_personas (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL UNIQUE,
+    primary_age_group TEXT,
+    core_motivation TEXT,
+    learning_style TEXT,
+    time_availability TEXT,
+    content_preference TEXT,
+    success_metrics TEXT,
+    pain_points TEXT,
+    technology_comfort TEXT,
+    preferred_devices TEXT,
+    budget_sensitivity TEXT,
+    social_learning_need TEXT,
+    market_size_percentage DECIMAL(5,2),
+    revenue_potential TEXT,
+    acquisition_cost TEXT,
+    retention_rate TEXT,
+    engagement_pattern TEXT,
+    peak_learning_hours TEXT,
+    course_completion_rate DECIMAL(5,2),
+    avg_session_duration TEXT,
+    preferred_assessment TEXT,
+    dropout_risk_factors TEXT,
+    curriculum_structure TEXT,
+    ai_tutor_personality TEXT,
+    gamification_elements TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+-- Persona-Specific Content Adaptations
+CREATE TABLE IF NOT EXISTS ugc_persona_adaptations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    persona_id UUID NOT NULL REFERENCES ugc_personas(id) ON DELETE CASCADE,
+    content_item_id UUID NOT NULL REFERENCES ugc_content_items(id) ON DELETE CASCADE,
+    adaptation_type TEXT NOT NULL CHECK (adaptation_type IN (
+        'time_allocation', 'difficulty_adjustment', 'format_preference', 
+        'assessment_modification', 'example_customization'
+    )),
+    adaptation_config JSONB NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(persona_id, content_item_id, adaptation_type)
+);
+
+-- ===============================================
+-- TAXONOMY AND TAGGING SYSTEM
+-- ===============================================
+
+-- Skills Taxonomy (Hierarchical skill structure)
+CREATE TABLE IF NOT EXISTS ugc_skills (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    skill_type TEXT CHECK (skill_type IN ('technical', 'soft', 'cognitive', 'domain')),
+    parent_skill_id UUID REFERENCES ugc_skills(id) ON DELETE CASCADE,
+    skill_level INTEGER DEFAULT 1,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(name, parent_skill_id)
+);
+
+-- Tags (Flexible tagging system)
+CREATE TABLE IF NOT EXISTS ugc_tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL UNIQUE,
+    category TEXT,
+    description TEXT,
+    color_hex TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Content-Skills Mapping (Many-to-many)
+CREATE TABLE IF NOT EXISTS ugc_content_skills (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    content_item_id UUID NOT NULL REFERENCES ugc_content_items(id) ON DELETE CASCADE,
+    skill_id UUID NOT NULL REFERENCES ugc_skills(id) ON DELETE CASCADE,
+    skill_weight DECIMAL(3,2) DEFAULT 1.0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(content_item_id, skill_id)
+);
+
+-- Content-Tags Mapping (Many-to-many)
+CREATE TABLE IF NOT EXISTS ugc_content_tags (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    content_item_id UUID NOT NULL REFERENCES ugc_content_items(id) ON DELETE CASCADE,
+    tag_id UUID NOT NULL REFERENCES ugc_tags(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(content_item_id, tag_id)
+);
+
+-- ===============================================
+-- ASSESSMENT SYSTEM
+-- ===============================================
+
+-- Assessment Templates (Reusable assessment configurations)
+CREATE TABLE IF NOT EXISTS ugc_assessment_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    assessment_type TEXT NOT NULL CHECK (assessment_type IN (
+        'multiple_choice', 'coding_challenge', 'project', 'essay', 'practical'
+    )),
+    configuration JSONB NOT NULL,
+    grading_rubric JSONB,
+    auto_gradeable BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Assessments (Specific assessment instances)
+CREATE TABLE IF NOT EXISTS ugc_assessments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    content_item_id UUID NOT NULL REFERENCES ugc_content_items(id) ON DELETE CASCADE,
+    template_id UUID REFERENCES ugc_assessment_templates(id),
+    title TEXT NOT NULL,
+    instructions TEXT,
+    assessment_data JSONB NOT NULL,
+    max_attempts INTEGER DEFAULT 3,
+    time_limit_minutes INTEGER,
+    passing_score DECIMAL(5,2) DEFAULT 70.0,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Assessment Questions (For MCQ and structured assessments)
+CREATE TABLE IF NOT EXISTS ugc_assessment_questions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assessment_id UUID NOT NULL REFERENCES ugc_assessments(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    question_type TEXT NOT NULL CHECK (question_type IN (
+        'multiple_choice', 'true_false', 'short_answer', 'code', 'fill_blank'
+    )),
+    question_data JSONB NOT NULL,
+    points DECIMAL(5,2) DEFAULT 1.0,
+    sequence_order INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(assessment_id, sequence_order)
+);
+
+-- Coding Challenge Test Cases
+CREATE TABLE IF NOT EXISTS ugc_coding_test_cases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    question_id UUID NOT NULL REFERENCES ugc_assessment_questions(id) ON DELETE CASCADE,
+    input_data JSONB NOT NULL,
+    expected_output JSONB NOT NULL,
+    is_hidden BOOLEAN DEFAULT FALSE,
+    test_case_order INTEGER NOT NULL,
+    timeout_ms INTEGER DEFAULT 5000,
+    memory_limit_mb INTEGER DEFAULT 128,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(question_id, test_case_order)
+);
+
+-- ===============================================
+-- USER PROGRESS AND ANALYTICS (SIMPLIFIED)
+-- ===============================================
+
+-- User Enrollments (Simplified - no auth.users dependency for testing)
+CREATE TABLE IF NOT EXISTS ugc_user_enrollments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT NOT NULL, -- Simplified instead of user_id
+    curriculum_id UUID NOT NULL REFERENCES ugc_curricula(id) ON DELETE CASCADE,
+    persona_id UUID REFERENCES ugc_personas(id),
+    enrollment_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    target_completion_date TIMESTAMP WITH TIME ZONE,
+    actual_completion_date TIMESTAMP WITH TIME ZONE,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed', 'dropped')),
+    completion_percentage DECIMAL(5,2) DEFAULT 0.0,
+    last_activity_at TIMESTAMP WITH TIME ZONE,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    UNIQUE(user_email, curriculum_id)
+);
+
+-- User Progress Tracking (Content-level)
+CREATE TABLE IF NOT EXISTS ugc_user_progress (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT NOT NULL, -- Simplified
+    content_item_id UUID NOT NULL REFERENCES ugc_content_items(id) ON DELETE CASCADE,
+    enrollment_id UUID NOT NULL REFERENCES ugc_user_enrollments(id) ON DELETE CASCADE,
+    
+    -- Progress Metrics
+    status TEXT DEFAULT 'not_started' CHECK (status IN ('not_started', 'in_progress', 'completed', 'skipped')),
+    progress_percentage DECIMAL(5,2) DEFAULT 0.0,
+    time_spent_minutes INTEGER DEFAULT 0,
+    attempts_count INTEGER DEFAULT 0,
+    confidence_level INTEGER CHECK (confidence_level BETWEEN 1 AND 5),
+    
+    -- Timestamps
+    started_at TIMESTAMP WITH TIME ZONE,
+    last_accessed_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Analytics Data
+    interaction_data JSONB DEFAULT '{}'::jsonb,
+    performance_metrics JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_email, content_item_id, enrollment_id)
+);
+
+-- Assessment Attempts
+CREATE TABLE IF NOT EXISTS ugc_assessment_attempts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_email TEXT NOT NULL, -- Simplified
+    assessment_id UUID NOT NULL REFERENCES ugc_assessments(id) ON DELETE CASCADE,
+    enrollment_id UUID NOT NULL REFERENCES ugc_user_enrollments(id) ON DELETE CASCADE,
+    
+    attempt_number INTEGER NOT NULL,
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    submitted_at TIMESTAMP WITH TIME ZONE,
+    time_taken_minutes INTEGER,
+    
+    -- Results
+    score DECIMAL(5,2),
+    max_score DECIMAL(5,2),
+    percentage_score DECIMAL(5,2),
+    passed BOOLEAN,
+    
+    -- Responses
+    responses JSONB DEFAULT '{}'::jsonb,
+    grading_data JSONB DEFAULT '{}'::jsonb,
+    feedback JSONB DEFAULT '{}'::jsonb,
+    
+    -- Status
+    status TEXT DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'submitted', 'graded', 'expired')),
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_email, assessment_id, attempt_number)
+);
+
+-- ===============================================
+-- AUDIT AND GOVERNANCE (SIMPLIFIED)
+-- ===============================================
+
+-- Audit Trail (Track important changes)
+CREATE TABLE IF NOT EXISTS ugc_audit_trail (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    table_name TEXT NOT NULL,
+    record_id UUID NOT NULL,
+    action_type TEXT NOT NULL CHECK (action_type IN ('INSERT', 'UPDATE', 'DELETE')),
+    old_values JSONB,
+    new_values JSONB,
+    changed_fields TEXT[],
+    user_email TEXT,
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- System Logs (FIXED - Primary key includes partition column)
+CREATE TABLE IF NOT EXISTS ugc_system_logs (
+    id UUID DEFAULT gen_random_uuid(),
+    log_level TEXT NOT NULL CHECK (log_level IN ('DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL')),
+    category TEXT NOT NULL,
+    message TEXT NOT NULL,
+    context JSONB DEFAULT '{}'::jsonb,
+    user_email TEXT,
+    session_id TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (id, created_at) -- FIXED: Include partition column in PRIMARY KEY
+) PARTITION BY RANGE (created_at);
+
+-- Create monthly partitions for system logs (last 12 months)
+DO $$
+DECLARE
+    start_date DATE := date_trunc('month', CURRENT_DATE - INTERVAL '12 months');
+    end_date DATE := date_trunc('month', CURRENT_DATE + INTERVAL '1 month');
+    month_start DATE := start_date;
+    month_end DATE;
+BEGIN
+    WHILE month_start < end_date LOOP
+        month_end := month_start + INTERVAL '1 month';
+        EXECUTE format('CREATE TABLE IF NOT EXISTS ugc_system_logs_%s PARTITION OF ugc_system_logs FOR VALUES FROM (%L) TO (%L)',
+            to_char(month_start, 'YYYY_MM'),
+            month_start,
+            month_end
+        );
+        month_start := month_end;
+    END LOOP;
+END $$;
+
+-- ===============================================
+-- INDEXES FOR PERFORMANCE (FIXED - NO CONCURRENTLY)
+-- ===============================================
+
+-- Primary search and relationship indexes
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_component_id ON ugc_content_items(component_id);
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_topic_id ON ugc_content_items(topic_id);
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_content_type ON ugc_content_items(content_type);
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_difficulty ON ugc_content_items(difficulty_level);
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_active ON ugc_content_items(is_active);
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_external_id ON ugc_content_items(external_id);
+
+-- External embedding indexes
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_embedding_source ON ugc_content_items(embedding_source);
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_external_vector_id ON ugc_content_items(external_vector_id);
+
+-- Progress tracking indexes
+CREATE INDEX IF NOT EXISTS idx_ugc_user_progress_user_content ON ugc_user_progress(user_email, content_item_id);
+CREATE INDEX IF NOT EXISTS idx_ugc_user_progress_enrollment ON ugc_user_progress(enrollment_id);
+CREATE INDEX IF NOT EXISTS idx_ugc_user_progress_status ON ugc_user_progress(status);
+CREATE INDEX IF NOT EXISTS idx_ugc_user_progress_updated ON ugc_user_progress(updated_at);
+
+-- Assessment indexes
+CREATE INDEX IF NOT EXISTS idx_ugc_assessment_attempts_user_assessment ON ugc_assessment_attempts(user_email, assessment_id);
+CREATE INDEX IF NOT EXISTS idx_ugc_assessment_attempts_enrollment ON ugc_assessment_attempts(enrollment_id);
+CREATE INDEX IF NOT EXISTS idx_ugc_assessment_attempts_status ON ugc_assessment_attempts(status);
+
+-- Audit and logging indexes
+CREATE INDEX IF NOT EXISTS idx_ugc_audit_trail_record ON ugc_audit_trail(table_name, record_id);
+CREATE INDEX IF NOT EXISTS idx_ugc_audit_trail_user_date ON ugc_audit_trail(user_email, created_at);
+
+-- Full-text search indexes
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_search ON ugc_content_items 
+    USING GIN(to_tsvector('english', title || ' ' || COALESCE(description, '') || ' ' || COALESCE(content_text, '')));
+
+-- JSONB indexes for flexible queries
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_keywords ON ugc_content_items USING GIN(keywords);
+CREATE INDEX IF NOT EXISTS idx_ugc_content_items_prerequisites ON ugc_content_items USING GIN(prerequisites);
+CREATE INDEX IF NOT EXISTS idx_ugc_user_progress_interaction_data ON ugc_user_progress USING GIN(interaction_data);
+
+-- ===============================================
+-- TRIGGERS FOR AUTOMATED FUNCTIONALITY
+-- ===============================================
+
+-- Update timestamp trigger function
+CREATE OR REPLACE FUNCTION ugc_update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply updated_at triggers to relevant tables
+CREATE TRIGGER ugc_curricula_updated_at BEFORE UPDATE ON ugc_curricula 
+    FOR EACH ROW EXECUTE FUNCTION ugc_update_updated_at();
+CREATE TRIGGER ugc_courses_updated_at BEFORE UPDATE ON ugc_courses 
+    FOR EACH ROW EXECUTE FUNCTION ugc_update_updated_at();
+CREATE TRIGGER ugc_curriculum_modules_updated_at BEFORE UPDATE ON ugc_curriculum_modules 
+    FOR EACH ROW EXECUTE FUNCTION ugc_update_updated_at();
+CREATE TRIGGER ugc_curriculum_components_updated_at BEFORE UPDATE ON ugc_curriculum_components 
+    FOR EACH ROW EXECUTE FUNCTION ugc_update_updated_at();
+CREATE TRIGGER ugc_content_items_updated_at BEFORE UPDATE ON ugc_content_items 
+    FOR EACH ROW EXECUTE FUNCTION ugc_update_updated_at();
+CREATE TRIGGER ugc_user_progress_updated_at BEFORE UPDATE ON ugc_user_progress 
+    FOR EACH ROW EXECUTE FUNCTION ugc_update_updated_at();
+CREATE TRIGGER ugc_assessment_attempts_updated_at BEFORE UPDATE ON ugc_assessment_attempts 
+    FOR EACH ROW EXECUTE FUNCTION ugc_update_updated_at();
+
+-- ===============================================
+-- SAMPLE DATA FOR TESTING
+-- ===============================================
+
+-- Insert sample personas
+INSERT INTO ugc_personas (name, primary_age_group, learning_style, time_availability, course_completion_rate, avg_session_duration)
+VALUES 
+    ('The Ambitious Placement Seeker', '18-22', 'Interactive, project-based with competitive elements', '4-6 hours/week', 65.0, '45 mins'),
+    ('The Time-Constrained Professional', '25-35', 'Micro-learning, bite-sized modules (10-15 mins)', '3-5 hours/week', 78.0, '15 mins'),
+    ('The Credibility-Building Graduate', '21-25', 'Hands-on practical projects with real-world application', '6-8 hours/week', 45.0, '60 mins'),
+    ('The Self-Directed Freelancer', '23-30', 'Self-paced structured paths with case studies', 'Variable, project-based', 82.0, '90 mins'),
+    ('The Career Transformation Seeker', '28-40', 'Mentorship-guided with community support', '8-12 hours/week', 55.0, '35 mins'),
+    ('The Continuous Learning Enthusiast', '25-45', 'Self-directed exploration with optional deep-dives', '2-4 hours/week', 35.0, '25 mins')
+ON CONFLICT (name) DO NOTHING;
+
+-- Insert sample curriculum
+INSERT INTO ugc_curricula (title, description, difficulty_level, estimated_total_hours)
+VALUES 
+    ('Ultra Grand Python Curriculum', 'Comprehensive Python learning path from basics to advanced concepts', 'beginner', 120)
+ON CONFLICT DO NOTHING;
+
+-- Get the curriculum ID and insert related data
+DO $$
+DECLARE
+    curriculum_uuid UUID;
+    course_uuid UUID;
+    module_uuid UUID;
+    component_uuid UUID;
+    topic_uuid UUID;
+    content_uuid UUID;
+BEGIN
+    -- Get curriculum ID
+    SELECT id INTO curriculum_uuid FROM ugc_curricula WHERE title = 'Ultra Grand Python Curriculum' LIMIT 1;
+    
+    IF curriculum_uuid IS NULL THEN
+        RAISE EXCEPTION 'Curriculum not found';
+    END IF;
+    
+    -- Insert sample course
+    INSERT INTO ugc_courses (curriculum_id, title, description, sequence_order, estimated_hours)
+    VALUES (curriculum_uuid, 'Python Fundamentals', 'Core Python concepts and syntax', 1, 60)
+    RETURNING id INTO course_uuid;
+    
+    -- Insert sample module
+    INSERT INTO ugc_curriculum_modules (course_id, module_number, title, description, sequence_order, estimated_hours)
+    VALUES (course_uuid, 1, 'Foundation & Environment Setup', 'Setting up Python and development environment', 1, 8)
+    RETURNING id INTO module_uuid;
+    
+    -- Insert sample component
+    INSERT INTO ugc_curriculum_components (module_id, component_code, title, description, sequence_order, estimated_minutes)
+    VALUES (module_uuid, '1.1', 'Python Installation & IDE Setup', 'Install Python and configure development environment', 1, 45)
+    RETURNING id INTO component_uuid;
+    
+    -- Insert sample topic
+    INSERT INTO ugc_topics (component_id, title, description, sequence_order, estimated_minutes)
+    VALUES (component_uuid, 'Multi-Platform Python Installation', 'Installing Python on Windows, Mac, and Linux', 1, 20)
+    RETURNING id INTO topic_uuid;
+    
+    -- Insert sample content item
+    INSERT INTO ugc_content_items (
+        external_id, topic_id, title, description, content_type, format, 
+        difficulty_level, estimated_duration, content_text
+    )
+    VALUES (
+        'py-001-installation-overview', topic_uuid,
+        'Python Installation Overview', 
+        'Introduction to Python installation process across different operating systems',
+        'concept_explanation', 'markdown', 'beginner', 5,
+        '# Python Installation Overview
+
+Python is a high-level programming language that needs to be properly installed on your system.
+
+## Installation Steps
+1. Download Python from official website
+2. Run the installer
+3. Verify installation
+4. Set up your IDE
+
+This content will guide you through each step.'
+    )
+    RETURNING id INTO content_uuid;
+    
+    -- Insert sample skills
+    INSERT INTO ugc_skills (name, description, skill_type)
+    VALUES 
+        ('Python Programming', 'Fundamental Python programming skills', 'technical'),
+        ('Environment Setup', 'Setting up development environments', 'technical'),
+        ('Problem Solving', 'Algorithmic thinking and problem solving', 'cognitive')
+    ON CONFLICT (name, parent_skill_id) DO NOTHING;
+    
+    -- Insert sample tags
+    INSERT INTO ugc_tags (name, category, description)
+    VALUES 
+        ('Beginner', 'difficulty', 'Suitable for beginners'),
+        ('Setup', 'category', 'Environment and tool setup'),
+        ('Python', 'technology', 'Python programming language')
+    ON CONFLICT (name) DO NOTHING;
+    
+    -- Insert a sample user enrollment
+    INSERT INTO ugc_user_enrollments (user_email, curriculum_id, persona_id)
+    VALUES ('test@example.com', curriculum_uuid, (SELECT id FROM ugc_personas WHERE name = 'The Ambitious Placement Seeker' LIMIT 1))
+    ON CONFLICT (user_email, curriculum_id) DO NOTHING;
+    
+    RAISE NOTICE 'Sample data inserted successfully';
+    RAISE NOTICE 'Curriculum ID: %', curriculum_uuid;
+    RAISE NOTICE 'Content ID: %', content_uuid;
+END $$;
+
+-- ===============================================
+-- VERIFICATION QUERIES
+-- ===============================================
+
+-- Check if everything was created successfully
+DO $$
+DECLARE
+    table_count INTEGER;
+    index_count INTEGER;
+    trigger_count INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO table_count FROM information_schema.tables WHERE table_name LIKE 'ugc_%';
+    SELECT COUNT(*) INTO index_count FROM pg_indexes WHERE indexname LIKE 'idx_ugc_%';
+    SELECT COUNT(*) INTO trigger_count FROM information_schema.triggers WHERE trigger_name LIKE 'ugc_%';
+    
+    RAISE NOTICE '=== SCHEMA CREATION COMPLETE ===';
+    RAISE NOTICE 'Tables created: %', table_count;
+    RAISE NOTICE 'Indexes created: %', index_count;
+    RAISE NOTICE 'Triggers created: %', trigger_count;
+    RAISE NOTICE 'Schema is ready for use!';
+END $$;
